@@ -1,0 +1,62 @@
+# --------------------------------------------------
+# SwipeWise - Git Ignore
+# --------------------------------------------------
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Node dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+
+# Build output
+dist/
+build/
+web-build/
+
+# EAS / native generated build artifacts
+*.ipa
+*.apk
+*.aab
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# VS Code local settings
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Coverage / test output
+coverage/
+
+# Local Supabase temporary files
+.supabase/
+
+# Secrets / certificates / signing files
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+*.cer
