@@ -11,7 +11,22 @@ import {
   Modal,
   Switch,
   Platform,
+  Alert,
+  ActivityIndicator,
+  useColorScheme,
 } from 'react-native';
+
+import { isSupabaseConfigured, supabase } from './lib/supabase';
+import { signInWithEmail, signOut, signUpWithEmail } from './services/authService';
+import {
+  completeOnboarding,
+  getProfileAndSettings,
+  rewardPreferenceFromDb,
+  rewardPreferenceToDb,
+  updateUserSettings,
+} from './services/profileService';
+import { addWalletCard, getWalletCardSlugs, removeWalletCard, syncWallet } from './services/walletService';
+import { clearPurchases, createPurchase, getPurchases } from './services/purchaseService';
 
 const BLUE = '#0798ff';
 const CYAN = '#35d8ff';
@@ -205,6 +220,57 @@ function Stat({ t, title, value, accent = CYAN }) {
   );
 }
 
+function BackendSetupRequired({ theme }) {
+  const t = makeTheme(theme);
+  return (
+    <AppShell theme={theme}>
+      <ScrollView contentContainerStyle={styles.page}>
+        <View style={{ flex: 1, minHeight: 90 }} />
+        <Logo t={t} />
+        <Header t={t} title="Connect Supabase" subtitle="SwipeWise is ready for the real backend, but this copy does not have your project values yet." />
+        <Glass t={t}>
+          <Text style={{ color: t.text, fontWeight: '800' }}>Create a .env file in the project root with:</Text>
+          <Text style={{ color: CYAN, marginTop: 10, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>EXPO_PUBLIC_SUPABASE_URL=...</Text>
+          <Text style={{ color: CYAN, marginTop: 6, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...</Text>
+          <Text style={{ color: t.secondary, marginTop: 12 }}>Then stop Expo and run npx expo start again.</Text>
+        </Glass>
+        <Text style={[styles.tiny, { color: t.secondary }]}>Never put a service-role key or sb_secret_* key in the Expo app.</Text>
+      </ScrollView>
+    </AppShell>
+  );
+}
+
+function LoadingScreen({ theme, message = 'Connecting to SwipeWise…' }) {
+  const t = makeTheme(theme);
+  return (
+    <AppShell theme={theme}>
+      <View style={styles.centerPage}>
+        <View style={{ flex: 1 }} />
+        <Logo t={t} compact />
+        <ActivityIndicator size="large" color={CYAN} style={{ marginTop: 24 }} />
+        <Text style={[styles.tagline, { color: t.secondary }]}>{message}</Text>
+        <View style={{ flex: 1 }} />
+      </View>
+    </AppShell>
+  );
+}
+
+function BackendProblem({ theme, message, onRetry, onSignOut }) {
+  const t = makeTheme(theme);
+  return (
+    <AppShell theme={theme}>
+      <ScrollView contentContainerStyle={styles.page}>
+        <View style={{ minHeight: 70 }} />
+        <Header t={t} title="Supabase setup needs attention" subtitle="SwipeWise connected to Supabase, but one of the required database operations failed." />
+        <Glass t={t}><Text style={{ color: RED, fontWeight: '700' }}>{message}</Text></Glass>
+        <Text style={{ color: t.secondary }}>Make sure you ran backend/supabase_schema.sql first and backend/demo_seed.sql second in Supabase SQL Editor.</Text>
+        <Button t={t} title="Try Again" onPress={onRetry} />
+        {onSignOut ? <Button t={t} title="Sign Out" secondary onPress={onSignOut} /> : null}
+      </ScrollView>
+    </AppShell>
+  );
+}
+
 function Splash({ theme, onDone }) {
   const t = makeTheme(theme);
   useEffect(() => { const x = setTimeout(onDone, 1100); return () => clearTimeout(x); }, []);
@@ -221,16 +287,95 @@ function Splash({ theme, onDone }) {
   );
 }
 
-function Onboarding({ theme, setTheme, onFinish, setUserName, selectedIds, setSelectedIds, rewardPreference, setRewardPreference }) {
+function Onboarding({
+  theme,
+  appearance,
+  onAppearanceChange,
+  session,
+  onFinish,
+  userName,
+  setUserName,
+  selectedIds,
+  setSelectedIds,
+  rewardPreference,
+  setRewardPreference,
+}) {
   const t = makeTheme(theme);
-  const [stage, setStage] = useState(0);
-  const [name, setName] = useState('');
+  const [stage, setStage] = useState(session ? 2 : 0);
+  const [name, setName] = useState(userName || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [setupIds, setSetupIds] = useState(selectedIds);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [finishing, setFinishing] = useState(false);
+
+  useEffect(() => {
+    if (session && stage < 2) setStage(2);
+  }, [session, stage]);
+
+  useEffect(() => {
+    if (selectedIds.length) setSetupIds(selectedIds);
+  }, [selectedIds]);
+
+  useEffect(() => {
+    if (userName && !name) setName(userName);
+  }, [userName, name]);
 
   const next = () => setStage((s) => s + 1);
   const toggleCard = (id) => setSetupIds((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
+
+  const createAccount = async () => {
+    setAuthError('');
+    setAuthMessage('');
+    if (!name.trim()) return setAuthError('Please enter your display name.');
+    if (!email.trim()) return setAuthError('Please enter your email address.');
+    if (password.length < 6) return setAuthError('Password must be at least 6 characters.');
+    if (password !== confirmPassword) return setAuthError('Passwords do not match.');
+
+    setAuthBusy(true);
+    try {
+      const data = await signUpWithEmail({ displayName: name, email, password });
+      setUserName(name.trim());
+      if (data.session) {
+        setStage(2);
+      } else {
+        setAuthMessage('Account created. Confirm your email, then return here and sign in. For the first development test, you can temporarily disable Confirm Email in Supabase Auth settings.');
+      }
+    } catch (error) {
+      setAuthError(error.message || 'Could not create account.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const login = async () => {
+    setAuthError('');
+    setAuthMessage('');
+    if (!email.trim() || !password) return setAuthError('Enter your email and password.');
+    setAuthBusy(true);
+    try {
+      await signInWithEmail({ email, password });
+    } catch (error) {
+      setAuthError(error.message || 'Could not sign in.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const finish = async () => {
+    setAuthError('');
+    setFinishing(true);
+    try {
+      await onFinish({ selectedIds: setupIds, rewardPreference, appearance, displayName: name || userName });
+    } catch (error) {
+      setAuthError(error.message || 'Could not finish setup.');
+    } finally {
+      setFinishing(false);
+    }
+  };
 
   return (
     <AppShell theme={theme}>
@@ -241,18 +386,33 @@ function Onboarding({ theme, setTheme, onFinish, setUserName, selectedIds, setSe
           <Text style={[styles.bigCenter, { color: t.text }]}>Welcome to SwipeWise</Text>
           <Text style={[styles.tagline, { color: t.secondary }]}>Swipe smarter. Earn more.\nFind the right card for every purchase.</Text>
           <View style={{ flex: 1, minHeight: 90 }} />
-          <Button t={t} title="Get Started" onPress={next} />
-          <Button t={t} title="Sign In" secondary onPress={next} />
+          <Button t={t} title="Get Started" onPress={() => { setAuthError(''); setStage(1); }} />
+          <Button t={t} title="Sign In" secondary onPress={() => { setAuthError(''); setStage(10); }} />
         </>}
 
         {stage === 1 && <>
-          <Header t={t} title="Create Account" subtitle="Let's get started" />
-          <Field t={t} value={name} onChangeText={setName} placeholder="Full Name" />
-          <Field t={t} value={email} onChangeText={setEmail} placeholder="Email Address" keyboardType="email-address" />
-          <Field t={t} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
+          <Header t={t} title="Create Account" subtitle="Create your real SwipeWise account with Supabase Auth." />
+          <Field t={t} value={name} onChangeText={setName} placeholder="Display Name" autoCapitalize="words" />
+          <Field t={t} value={email} onChangeText={setEmail} placeholder="Email Address" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+          <Field t={t} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry autoCapitalize="none" />
+          <Field t={t} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm Password" secureTextEntry autoCapitalize="none" />
+          {authError ? <Text style={{ color: RED, fontWeight: '700' }}>{authError}</Text> : null}
+          {authMessage ? <Glass t={t}><Text style={{ color: t.secondary }}>{authMessage}</Text></Glass> : null}
+          <View style={{ flex: 1, minHeight: 80 }} />
+          <Button t={t} title={authBusy ? 'Creating Account…' : 'Create Account'} disabled={authBusy} onPress={createAccount} />
+          <Button t={t} title="Already have an account? Sign In" secondary onPress={() => { setAuthError(''); setStage(10); }} />
+          <Text style={[styles.tiny, { color: t.secondary }]}>SwipeWise stores your account, wallet selections, settings and purchase logs in Supabase. It never asks for full card number, CVV, PIN or expiry.</Text>
+        </>}
+
+        {stage === 10 && <>
+          <Header t={t} title="Sign In" subtitle="Welcome back to SwipeWise" />
+          <Field t={t} value={email} onChangeText={setEmail} placeholder="Email Address" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+          <Field t={t} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry autoCapitalize="none" />
+          {authError ? <Text style={{ color: RED, fontWeight: '700' }}>{authError}</Text> : null}
           <View style={{ flex: 1, minHeight: 120 }} />
-          <Button t={t} title="Create Account" onPress={() => { setUserName(name.trim() || 'Ayan'); next(); }} />
-          <Text style={[styles.tiny, { color: t.secondary }]}>Prototype authentication is local in this converted v0.1.</Text>
+          <Button t={t} title={authBusy ? 'Signing In…' : 'Sign In'} disabled={authBusy} onPress={login} />
+          <Button t={t} title="Create a New Account" secondary onPress={() => { setAuthError(''); setStage(1); }} />
+          <Button t={t} title="Back" secondary onPress={() => { setAuthError(''); setStage(0); }} />
         </>}
 
         {stage === 2 && <>
@@ -267,8 +427,8 @@ function Onboarding({ theme, setTheme, onFinish, setUserName, selectedIds, setSe
         </>}
 
         {stage === 3 && <>
-          <Header t={t} title="Add Your Cards" subtitle="Manually add the cards you own. We never ask for card numbers or CVV." />
-          <Pressable onPress={next}>
+          <Header t={t} title="Add Your Cards" subtitle="Manually add the card products you own. We never ask for card numbers or CVV." />
+          <Pressable onPress={() => setStage(4)}>
             <Glass t={t} style={{ alignItems: 'center', paddingVertical: 32 }}>
               <Text style={{ color: CYAN, fontSize: 40 }}>＋</Text>
               <Text style={{ color: t.text, fontWeight: '800' }}>Add a Card</Text>
@@ -276,22 +436,22 @@ function Onboarding({ theme, setTheme, onFinish, setUserName, selectedIds, setSe
           </Pressable>
           <Text style={{ color: t.secondary }}>{setupIds.length} card(s) selected</Text>
           <View style={{ flex: 1, minHeight: 120 }} />
-          <Button t={t} title="Next" onPress={() => { if (!setupIds.length) setSetupIds([cards[0].id]); setStage(5); }} />
+          <Button t={t} title="Next" disabled={!setupIds.length} onPress={() => setStage(5)} />
         </>}
 
         {stage === 4 && <>
-          <Header t={t} title="Select Card Type" subtitle="Choose the type of card you want to add." />
+          <Header t={t} title="Select Card Type" subtitle="Current catalog entries are demo product identities for backend testing." />
           {['Credit Card', 'Debit Card', 'Prepaid Card', 'Store Card'].map((x) => <RowButton key={x} t={t} title={x} onPress={() => {}} />)}
           <Text style={[styles.sectionTitle, { color: t.text }]}>Card Catalog</Text>
-          {cards.map((c) => <RowButton key={c.id} t={t} title={`${c.bank} ${c.name}`} subtitle={`•••• ${c.last4}`} selected={setupIds.includes(c.id)} onPress={() => toggleCard(c.id)} />)}
+          {cards.map((c) => <RowButton key={c.id} t={t} title={`${c.bank} ${c.name}`} subtitle="Demo product reference" selected={setupIds.includes(c.id)} onPress={() => toggleCard(c.id)} />)}
           <Button t={t} title="Done" onPress={() => setStage(3)} />
         </>}
 
         {stage === 5 && <>
-          <Header t={t} title="Your Wallet" subtitle={`${Math.max(setupIds.length, 1)} Card Added!`} />
-          {(setupIds.length ? cards.filter((c) => setupIds.includes(c.id)) : [cards[0]]).map((c) => <CardVisual key={c.id} t={t} card={c} compact />)}
+          <Header t={t} title="Your Wallet" subtitle={`${setupIds.length} Card${setupIds.length === 1 ? '' : 's'} Added`} />
+          {cards.filter((c) => setupIds.includes(c.id)).map((c) => <CardVisual key={c.id} t={t} card={c} compact />)}
           <View style={{ flex: 1, minHeight: 90 }} />
-          <Button t={t} title="Continue" onPress={() => { setSelectedIds(setupIds.length ? setupIds : [cards[0].id]); next(); }} />
+          <Button t={t} title="Continue" disabled={!setupIds.length} onPress={() => { setSelectedIds(setupIds); next(); }} />
         </>}
 
         {stage === 6 && <>
@@ -321,10 +481,11 @@ function Onboarding({ theme, setTheme, onFinish, setUserName, selectedIds, setSe
           <View style={{ flex: 1, minHeight: 130 }} />
           <Text style={styles.complete}>✓</Text>
           <Text style={[styles.bigCenter, { color: t.text }]}>You're All Set! 🎉</Text>
-          <Text style={[styles.tagline, { color: t.secondary }]}>SwipeWise is ready to help you pay smarter.</Text>
+          <Text style={[styles.tagline, { color: t.secondary }]}>Your wallet and settings will now sync to Supabase.</Text>
+          {authError ? <Text style={{ color: RED, fontWeight: '700', textAlign: 'center' }}>{authError}</Text> : null}
           <View style={{ flex: 1, minHeight: 100 }} />
-          <Button t={t} title="Start Using App" onPress={onFinish} />
-          <Pressable onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><Text style={{ color: t.secondary, textAlign: 'center' }}>Preview {theme === 'dark' ? 'Light' : 'Dark'} Mode</Text></Pressable>
+          <Button t={t} title={finishing ? 'Saving Setup…' : 'Start Using App'} disabled={finishing} onPress={finish} />
+          <Pressable onPress={() => onAppearanceChange(appearance === 'dark' ? 'light' : 'dark')}><Text style={{ color: t.secondary, textAlign: 'center' }}>Preview {theme === 'dark' ? 'Light' : 'Dark'} Mode</Text></Pressable>
         </>}
       </ScrollView>
     </AppShell>
@@ -349,6 +510,8 @@ function QuickSwipe({ theme, wallet, rewardPreference, onClose, onSave }) {
   const [usedCard, setUsedCard] = useState(null);
   const [notes, setNotes] = useState('');
   const [why, setWhy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const amount = Number(amountText.replace(/[^0-9.]/g, '')) || null;
   const ranked = useMemo(() => rankCards(wallet, category, amount, rewardPreference), [wallet, category, amountText, rewardPreference]);
   const best = ranked[0];
@@ -356,14 +519,23 @@ function QuickSwipe({ theme, wallet, rewardPreference, onClose, onSave }) {
   const pickMerchant = (m) => { setMerchant(m); setStep('category'); };
   const pickCategory = (c) => { setCategory(c); setStep(shouldAskAmount(c) ? 'amount' : 'best'); };
 
-  const save = () => {
-    if (!best || !usedCard || !merchant) return;
+  const save = async () => {
+    if (!best || !usedCard || !merchant || saving) return;
     const r = ranked.find((x) => x.card.id === usedCard.id);
-    onSave({
-      id: `${Date.now()}`, date: new Date().toISOString(), mode, merchant: merchant.name, category,
-      amount, recommendedCardId: best.card.id, usedCardId: usedCard.id,
-      reward: r?.reward || 0, followed: usedCard.id === best.card.id, notes,
-    });
+    setSaveError('');
+    setSaving(true);
+    try {
+      await onSave({
+        id: `${Date.now()}`, date: new Date().toISOString(), mode, merchant: merchant.name, category,
+        amount, recommendedCardId: best.card.id, usedCardId: usedCard.id,
+        reward: r?.reward ?? null, followed: usedCard.id === best.card.id, overrideReason: null, notes,
+      });
+      setStep('saved');
+    } catch (error) {
+      setSaveError(error.message || 'Could not save this purchase.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -420,8 +592,9 @@ function QuickSwipe({ theme, wallet, rewardPreference, onClose, onSave }) {
             {!amountText && <Field t={t} value={amountText} onChangeText={setAmountText} placeholder="Amount (optional)" keyboardType="decimal-pad" />}
             <Field t={t} value={notes} onChangeText={setNotes} placeholder="Notes (optional)" multiline />
             {usedCard && <Glass t={t}><Text style={{ color: t.secondary }}>Card used</Text><Text style={{ color: t.text, fontWeight: '800', marginTop: 4 }}>{usedCard.bank} {usedCard.name}</Text></Glass>}
+            {saveError ? <Text style={{ color: RED, fontWeight: '700' }}>{saveError}</Text> : null}
             <View style={{ flex: 1, minHeight: 100 }} />
-            <Button t={t} title="Save Purchase" onPress={() => { save(); setStep('saved'); }} />
+            <Button t={t} title={saving ? "Saving…" : "Save Purchase"} disabled={saving} onPress={save} />
             <Button t={t} title="Skip" secondary onPress={onClose} />
           </>}
 
@@ -476,16 +649,54 @@ function Home({ t, userName, purchases, onQuick, onHistory }) {
   </ScrollView>;
 }
 
-function Wallet({ t, wallet, selectedIds, setSelectedIds }) {
+function Wallet({ t, wallet, selectedIds, onAddCard, onRemoveCard }) {
   const [detail, setDetail] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [busyCardId, setBusyCardId] = useState(null);
+
+  const add = async (cardId) => {
+    if (selectedIds.includes(cardId) || busyCardId) return;
+    setBusyCardId(cardId);
+    try {
+      await onAddCard(cardId);
+    } catch (error) {
+      Alert.alert('Could not add card', error.message || 'Please try again.');
+    } finally {
+      setBusyCardId(null);
+    }
+  };
+
+  const remove = async (cardId) => {
+    if (busyCardId) return;
+    setBusyCardId(cardId);
+    try {
+      await onRemoveCard(cardId);
+      setDetail(null);
+    } catch (error) {
+      Alert.alert('Could not remove card', error.message || 'Please try again.');
+    } finally {
+      setBusyCardId(null);
+    }
+  };
+
   return <ScrollView contentContainerStyle={styles.tabPage}>
     <Header t={t} title="My Cards" subtitle={`${wallet.length} cards in your wallet`} />
+    {!wallet.length ? <Glass t={t}><Text style={{ color: t.secondary }}>No cards in your wallet yet. Add at least one card before using Quick Swipe.</Text></Glass> : null}
     {wallet.map((c) => <Pressable key={c.id} onPress={() => setDetail(c)}><CardVisual t={t} card={c} compact /></Pressable>)}
     <Button t={t} title="Add Card" onPress={() => setAdding(true)} />
     <DemoBanner t={t} />
-    <Modal visible={adding} animationType="slide" onRequestClose={() => setAdding(false)}><View style={{ flex: 1, backgroundColor: t.bg }}><ScrollView contentContainerStyle={styles.page}><Header t={t} title="Add Card" />{cards.map((c) => <RowButton key={c.id} t={t} title={`${c.bank} ${c.name}`} subtitle={`•••• ${c.last4}`} selected={selectedIds.includes(c.id)} onPress={() => setSelectedIds((ids) => ids.includes(c.id) ? ids : [...ids, c.id])} />)}<Button t={t} title="Done" onPress={() => setAdding(false)} /></ScrollView></View></Modal>
-    <Modal visible={!!detail} animationType="slide" onRequestClose={() => setDetail(null)}>{detail && <CardDetails t={t} card={detail} onClose={() => setDetail(null)} onRemove={() => { setSelectedIds((ids) => ids.filter((x) => x !== detail.id)); setDetail(null); }} />}</Modal>
+    <Modal visible={adding} animationType="slide" onRequestClose={() => setAdding(false)}>
+      <View style={{ flex: 1, backgroundColor: t.bg }}>
+        <ScrollView contentContainerStyle={styles.page}>
+          <Header t={t} title="Add Card" subtitle="These are demo product identities until the verified Canadian card database is connected." />
+          {cards.map((c) => <RowButton key={c.id} t={t} title={`${c.bank} ${c.name}`} subtitle={busyCardId === c.id ? 'Saving…' : 'Demo product reference'} selected={selectedIds.includes(c.id)} onPress={() => add(c.id)} />)}
+          <Button t={t} title="Done" onPress={() => setAdding(false)} />
+        </ScrollView>
+      </View>
+    </Modal>
+    <Modal visible={!!detail} animationType="slide" onRequestClose={() => setDetail(null)}>
+      {detail && <CardDetails t={t} card={detail} onClose={() => setDetail(null)} onRemove={() => remove(detail.id)} />}
+    </Modal>
   </ScrollView>;
 }
 
@@ -517,24 +728,55 @@ function HistoryModal({ theme, purchases, wallet, onClose }) {
   const t = makeTheme(theme);
   const [selected, setSelected] = useState(null);
   const getCard = (id) => cards.find((c) => c.id === id)?.name || 'Card';
-  return <Modal visible animationType="slide" onRequestClose={onClose}><AppShell theme={theme}><ScrollView contentContainerStyle={styles.page}><Header t={t} title={selected ? 'Purchase Detail' : 'History'} />{!selected ? purchases.map((p) => <RowButton key={p.id} t={t} title={p.merchant} subtitle={`${new Date(p.date).toLocaleDateString()} • ${p.category}`} icon={p.amount ? money(p.amount) : '›'} onPress={() => setSelected(p)} />) : <><Header t={t} title={selected.merchant} subtitle={`${new Date(selected.date).toLocaleString()} • ${selected.mode}`} /><Glass t={t}><DetailRow t={t} a="Amount" b={selected.amount ? money(selected.amount) : 'Not entered'} /><DetailRow t={t} a="Category" b={selected.category} /><DetailRow t={t} a="Recommended" b={getCard(selected.recommendedCardId)} /><DetailRow t={t} a="Card used" b={getCard(selected.usedCardId)} /><DetailRow t={t} a="Est. reward" b={money(selected.reward)} /><DetailRow t={t} a="Followed recommendation" b={selected.followed ? 'Yes' : 'No'} /></Glass>{selected.notes ? <Glass t={t}><Text style={{ color: t.text }}>{selected.notes}</Text></Glass> : null}<Button t={t} title="Back to History" secondary onPress={() => setSelected(null)} /></>}<Button t={t} title="Done" onPress={onClose} /></ScrollView></AppShell></Modal>;
+  return <Modal visible animationType="slide" onRequestClose={onClose}><AppShell theme={theme}><ScrollView contentContainerStyle={styles.page}><Header t={t} title={selected ? 'Purchase Detail' : 'History'} />{!selected ? purchases.map((p) => <RowButton key={p.id} t={t} title={p.merchant} subtitle={`${new Date(p.date).toLocaleDateString()} • ${p.category}`} icon={p.amount ? money(p.amount) : '›'} onPress={() => setSelected(p)} />) : <><Header t={t} title={selected.merchant} subtitle={`${new Date(selected.date).toLocaleString()} • ${selected.mode}`} /><Glass t={t}><DetailRow t={t} a="Amount" b={selected.amount ? money(selected.amount) : 'Not entered'} /><DetailRow t={t} a="Category" b={selected.category} /><DetailRow t={t} a="Recommended" b={getCard(selected.recommendedCardId)} /><DetailRow t={t} a="Card used" b={getCard(selected.usedCardId)} /><DetailRow t={t} a="Est. reward" b={selected.reward == null ? 'Not estimated' : money(selected.reward)} /><DetailRow t={t} a="Followed recommendation" b={selected.followed ? 'Yes' : 'No'} /></Glass>{selected.notes ? <Glass t={t}><Text style={{ color: t.text }}>{selected.notes}</Text></Glass> : null}<Button t={t} title="Back to History" secondary onPress={() => setSelected(null)} /></>}<Button t={t} title="Done" onPress={onClose} /></ScrollView></AppShell></Modal>;
 }
 
-function Settings({ t, theme, setTheme, userName, rewardPreference, setRewardPreference, onReset, onClear }) {
+function Settings({
+  t,
+  appearance,
+  onAppearanceChange,
+  userName,
+  rewardPreference,
+  onRewardPreferenceChange,
+  onClear,
+  onSignOut,
+}) {
   const [page, setPage] = useState('Settings');
   const [notifs, setNotifs] = useState({ alerts: true, recs: true, summary: true, updates: true, marketing: false });
   const back = () => setPage('Settings');
-  if (page !== 'Settings') return <ScrollView contentContainerStyle={styles.tabPage}><Pressable onPress={back}><Text style={{ color: CYAN, fontWeight: '800' }}>‹ Settings</Text></Pressable><Header t={t} title={page} />
-    {page === 'Profile' && <><Text style={styles.avatar}>●</Text><Text style={[styles.bigCenter, { color: t.text }]}>{userName}</Text><Text style={[styles.tagline, { color: t.secondary }]}>Prototype account</Text>{['Personal Info', 'Communication', 'Security'].map((x) => <RowButton key={x} t={t} title={x} onPress={() => {}} />)}</>}
-    {page === 'Appearance & Text' && <>{['light', 'dark', 'system'].map((x) => <RowButton key={x} t={t} title={x[0].toUpperCase() + x.slice(1)} selected={(theme === x) || (x === 'system' && !['light','dark'].includes(theme))} onPress={() => setTheme(x === 'system' ? (Platform.OS === 'web' ? 'dark' : 'dark') : x)} />)}<Glass t={t}><Text style={[styles.sectionTitle, { color: t.text }]}>Preview</Text><Logo t={t} compact /></Glass></>}
-    {page === 'Reward Preference' && <>{['Maximum Overall Value', 'Cashback', 'Travel Points'].map((p) => <RowButton key={p} t={t} title={p} selected={rewardPreference === p} onPress={() => setRewardPreference(p)} />)}</>}
-    {page === 'Notifications' && <>{Object.entries(notifs).map(([k, v]) => <Glass key={k} t={t} style={styles.switchRow}><Text style={{ color: t.text, fontWeight: '700' }}>{({ alerts:'Purchase Alerts', recs:'New Recommendations', summary:'Monthly Summary', updates:'Rewards Updates', marketing:'Marketing Emails' })[k]}</Text><Switch value={v} onValueChange={(nv) => setNotifs((n) => ({ ...n, [k]: nv }))} /></Glass>)}</>}
-    {page === 'Data & Privacy' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Location</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Access is only simulated in the Snack build.</Text></Glass><Glass t={t}><Text style={{ color: t.text }}>SwipeWise v0.1 stores selections and logs only in current app memory. It does not store full card numbers, CVV or PIN.</Text></Glass><Button t={t} title="Clear Purchase History" secondary onPress={onClear} /><Button t={t} title="Reset App / Prototype Data" secondary onPress={onReset} /></>}
-    {page === 'Help & Support' && <>{['FAQ', 'Contact Us', 'Report an Issue', 'Video Tutorials'].map((x) => <RowButton key={x} t={t} title={x} onPress={() => {}} />)}<Text style={{ color: t.secondary }}>Support actions are placeholders in v0.1.</Text></>}
-    {page === 'About SwipeWise' && <><View style={{ minHeight: 70 }} /><Logo t={t} /><Text style={[styles.tagline, { color: t.secondary }]}>Version 0.1.0\nConverted from SwiftUI → Expo React Native</Text></>}
-    {page === 'Action Button' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Quick Swipe shortcut</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Native iPhone Action Button/App Intents require a native iOS build. This Snack version keeps the Quick Swipe feature inside the app.</Text></Glass></>}
-    {page === 'Data & Sync' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Local prototype</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Supabase schema from your Xcode project is included in the ZIP for the next backend milestone.</Text></Glass></>}
+
+  if (page !== 'Settings') return <ScrollView contentContainerStyle={styles.tabPage}>
+    <Pressable onPress={back}><Text style={{ color: CYAN, fontWeight: '800' }}>‹ Settings</Text></Pressable>
+    <Header t={t} title={page} />
+    {page === 'Profile' && <>
+      <Text style={styles.avatar}>●</Text>
+      <Text style={[styles.bigCenter, { color: t.text }]}>{userName}</Text>
+      <Text style={[styles.tagline, { color: t.secondary }]}>Supabase account</Text>
+      {['Personal Info', 'Communication', 'Security'].map((x) => <RowButton key={x} t={t} title={x} onPress={() => {}} />)}
+      <Button t={t} title="Sign Out" secondary onPress={onSignOut} />
+    </>}
+    {page === 'Appearance & Text' && <>
+      {['system', 'light', 'dark'].map((x) => <RowButton key={x} t={t} title={x[0].toUpperCase() + x.slice(1)} selected={appearance === x} onPress={() => onAppearanceChange(x)} />)}
+      <Glass t={t}><Text style={[styles.sectionTitle, { color: t.text }]}>Preview</Text><Logo t={t} compact /></Glass>
+    </>}
+    {page === 'Reward Preference' && <>
+      {['Maximum Overall Value', 'Cashback', 'Travel Points'].map((p) => <RowButton key={p} t={t} title={p} selected={rewardPreference === p} onPress={() => onRewardPreferenceChange(p)} />)}
+    </>}
+    {page === 'Notifications' && <>
+      {Object.entries(notifs).map(([k, v]) => <Glass key={k} t={t} style={styles.switchRow}><Text style={{ color: t.text, fontWeight: '700' }}>{({ alerts:'Purchase Alerts', recs:'New Recommendations', summary:'Monthly Summary', updates:'Rewards Updates', marketing:'Marketing Emails' })[k]}</Text><Switch value={v} onValueChange={(nv) => setNotifs((n) => ({ ...n, [k]: nv }))} /></Glass>)}
+      <Text style={{ color: t.secondary, fontSize: 12 }}>Notification toggles are still local UI placeholders in this milestone. The database has a settings field ready for them.</Text>
+    </>}
+    {page === 'Data & Privacy' && <>
+      <Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Location</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Location behavior is unchanged in this backend milestone and still uses demo nearby merchants.</Text></Glass>
+      <Glass t={t}><Text style={{ color: t.text }}>Your account, wallet selections, settings and logged purchases now sync through Supabase. SwipeWise still does not store full card numbers, CVV, PIN or expiry.</Text></Glass>
+      <Button t={t} title="Clear Purchase History" secondary onPress={onClear} />
+    </>}
+    {page === 'Help & Support' && <>{['FAQ', 'Contact Us', 'Report an Issue', 'Video Tutorials'].map((x) => <RowButton key={x} t={t} title={x} onPress={() => {}} />)}<Text style={{ color: t.secondary }}>Support actions remain placeholders in this milestone.</Text></>}
+    {page === 'About SwipeWise' && <><View style={{ minHeight: 70 }} /><Logo t={t} /><Text style={[styles.tagline, { color: t.secondary }]}>Version 0.2.0\nExpo React Native + Supabase backend</Text></>}
+    {page === 'Action Button' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Quick Swipe shortcut</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Native iPhone Action Button/App Intents require a native iOS build. This backend milestone leaves that feature unchanged.</Text></Glass></>}
+    {page === 'Data & Sync' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Supabase connected</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Authentication sessions, wallet selections, settings and purchase history use your Supabase development project. The recommendation rates remain clearly labelled demo data.</Text></Glass></>}
   </ScrollView>;
+
   return <ScrollView contentContainerStyle={styles.tabPage}><Header t={t} title="Settings" />
     <Text style={[styles.sectionLabel, { color: t.secondary }]}>ACCOUNT</Text><RowButton t={t} title="Profile" onPress={() => setPage('Profile')} />
     <Text style={[styles.sectionLabel, { color: t.secondary }]}>PREFERENCES</Text><RowButton t={t} title="Appearance & Text" onPress={() => setPage('Appearance & Text')} /><RowButton t={t} title="Reward Preference" onPress={() => setPage('Reward Preference')} />
@@ -547,39 +789,246 @@ function TabBar({ t, tab, setTab }) {
   return <View style={[styles.tabBar, { backgroundColor: t.bg2, borderColor: t.border }]}>{[['Home','⌂'],['Wallet','▣'],['Insights','⌁'],['Settings','⚙']].map(([name, icon]) => <Pressable key={name} onPress={() => setTab(name)} style={styles.tabBtn}><Text style={{ color: tab === name ? CYAN : t.secondary, fontSize: 20 }}>{icon}</Text><Text style={{ color: tab === name ? CYAN : t.secondary, fontSize: 10, fontWeight: '800' }}>{name}</Text></Pressable>)}</View>;
 }
 
-function MainApp({ theme, setTheme, userName, selectedIds, setSelectedIds, rewardPreference, setRewardPreference, purchases, setPurchases, onReset }) {
+function MainApp({
+  theme,
+  appearance,
+  onAppearanceChange,
+  userName,
+  selectedIds,
+  rewardPreference,
+  onRewardPreferenceChange,
+  purchases,
+  onAddCard,
+  onRemoveCard,
+  onSavePurchase,
+  onClearPurchases,
+  onSignOut,
+}) {
   const t = makeTheme(theme);
   const [tab, setTab] = useState('Home');
   const [quick, setQuick] = useState(false);
   const [history, setHistory] = useState(false);
   const wallet = cards.filter((c) => selectedIds.includes(c.id));
-  const safeWallet = wallet.length ? wallet : cards.slice(0, 1);
+
+  const openQuickSwipe = () => {
+    if (!wallet.length) {
+      Alert.alert('Add a card first', 'SwipeWise can only recommend cards that are in your wallet.');
+      setTab('Wallet');
+      return;
+    }
+    setQuick(true);
+  };
+
   return <AppShell theme={theme}>
     <View style={{ flex: 1 }}>
-      {tab === 'Home' && <Home t={t} userName={userName} purchases={purchases} onQuick={() => setQuick(true)} onHistory={() => setHistory(true)} />}
-      {tab === 'Wallet' && <Wallet t={t} wallet={safeWallet} selectedIds={selectedIds} setSelectedIds={setSelectedIds} />}
-      {tab === 'Insights' && <Insights t={t} purchases={purchases} wallet={safeWallet} />}
-      {tab === 'Settings' && <Settings t={t} theme={theme} setTheme={setTheme} userName={userName} rewardPreference={rewardPreference} setRewardPreference={setRewardPreference} onReset={onReset} onClear={() => setPurchases([])} />}
+      {tab === 'Home' && <Home t={t} userName={userName} purchases={purchases} onQuick={openQuickSwipe} onHistory={() => setHistory(true)} />}
+      {tab === 'Wallet' && <Wallet t={t} wallet={wallet} selectedIds={selectedIds} onAddCard={onAddCard} onRemoveCard={onRemoveCard} />}
+      {tab === 'Insights' && <Insights t={t} purchases={purchases} wallet={wallet} />}
+      {tab === 'Settings' && <Settings t={t} appearance={appearance} onAppearanceChange={onAppearanceChange} userName={userName} rewardPreference={rewardPreference} onRewardPreferenceChange={onRewardPreferenceChange} onClear={onClearPurchases} onSignOut={onSignOut} />}
       <TabBar t={t} tab={tab} setTab={setTab} />
     </View>
-    {quick && <QuickSwipe theme={theme} wallet={safeWallet} rewardPreference={rewardPreference} onClose={() => setQuick(false)} onSave={(p) => setPurchases((old) => [p, ...old])} />}
-    {history && <HistoryModal theme={theme} purchases={purchases} wallet={safeWallet} onClose={() => setHistory(false)} />}
+    {quick && <QuickSwipe theme={theme} wallet={wallet} rewardPreference={rewardPreference} onClose={() => setQuick(false)} onSave={onSavePurchase} />}
+    {history && <HistoryModal theme={theme} purchases={purchases} wallet={wallet} onClose={() => setHistory(false)} />}
   </AppShell>;
 }
 
 export default function App() {
+  const systemColorScheme = useColorScheme();
   const [splash, setSplash] = useState(true);
-  const [onboarded, setOnboarded] = useState(false);
-  const [theme, setTheme] = useState('dark');
-  const [userName, setUserName] = useState('Ayan');
-  const [selectedIds, setSelectedIds] = useState([cards[0].id, cards[1].id, cards[2].id]);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [backendError, setBackendError] = useState('');
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [appearance, setAppearance] = useState('system');
+  const [userName, setUserName] = useState('SwipeWise User');
+  const [selectedIds, setSelectedIds] = useState([]);
   const [rewardPreference, setRewardPreference] = useState('Maximum Overall Value');
   const [purchases, setPurchases] = useState([]);
 
-  const reset = () => { setPurchases([]); setSelectedIds([cards[0].id, cards[1].id, cards[2].id]); setOnboarded(false); setSplash(false); };
+  const theme = appearance === 'system'
+    ? (systemColorScheme === 'light' ? 'light' : 'dark')
+    : appearance;
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return undefined;
+    }
+
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) setBackendError(error.message);
+      setSession(data?.session || null);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
+      setSession(nextSession);
+      setAuthLoading(false);
+      setBackendError('');
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const hydrateUser = async (userId) => {
+    setBackendError('');
+    setDataLoading(true);
+    try {
+      const [{ profile: nextProfile, settings }, walletSlugs, history] = await Promise.all([
+        getProfileAndSettings(userId),
+        getWalletCardSlugs(userId),
+        getPurchases(userId),
+      ]);
+
+      setProfile(nextProfile);
+      setUserName(nextProfile.display_name || 'SwipeWise User');
+      setSelectedIds(walletSlugs.filter((slug) => cards.some((card) => card.id === slug)));
+      setRewardPreference(rewardPreferenceFromDb(settings.reward_preference));
+      setAppearance(settings.appearance || 'system');
+      setPurchases(history);
+    } catch (error) {
+      setBackendError(error.message || 'Could not load your SwipeWise data.');
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setProfile(null);
+      setUserName('SwipeWise User');
+      setSelectedIds([]);
+      setRewardPreference('Maximum Overall Value');
+      setPurchases([]);
+      return;
+    }
+    hydrateUser(session.user.id);
+  }, [session?.user?.id]);
+
+  const finishOnboarding = async ({ selectedIds: setupIds, rewardPreference: preference, appearance: selectedAppearance, displayName }) => {
+    if (!session?.user?.id) throw new Error('Your Supabase session is missing. Please sign in again.');
+    if (!setupIds.length) throw new Error('Add at least one card before finishing setup.');
+
+    await syncWallet(session.user.id, setupIds);
+    const nextProfile = await completeOnboarding(session.user.id, {
+      displayName: displayName || userName,
+      rewardPreference: preference,
+      appearance: selectedAppearance,
+    });
+
+    setSelectedIds(setupIds);
+    setRewardPreference(preference);
+    setAppearance(selectedAppearance);
+    setProfile(nextProfile);
+  };
+
+  const handleAddCard = async (cardId) => {
+    if (!session?.user?.id) throw new Error('Please sign in again.');
+    await addWalletCard(session.user.id, cardId);
+    setSelectedIds((ids) => ids.includes(cardId) ? ids : [...ids, cardId]);
+  };
+
+  const handleRemoveCard = async (cardId) => {
+    if (!session?.user?.id) throw new Error('Please sign in again.');
+    await removeWalletCard(session.user.id, cardId);
+    setSelectedIds((ids) => ids.filter((id) => id !== cardId));
+  };
+
+  const handleSavePurchase = async (purchase) => {
+    if (!session?.user?.id) throw new Error('Please sign in again.');
+    const saved = await createPurchase(session.user.id, purchase);
+    setPurchases((old) => [saved, ...old]);
+    return saved;
+  };
+
+  const handleRewardPreferenceChange = async (value) => {
+    if (!session?.user?.id) return;
+    const previous = rewardPreference;
+    setRewardPreference(value);
+    try {
+      await updateUserSettings(session.user.id, { reward_preference: rewardPreferenceToDb(value) });
+    } catch (error) {
+      setRewardPreference(previous);
+      Alert.alert('Could not save preference', error.message || 'Please try again.');
+    }
+  };
+
+  const handleAppearanceChange = async (value) => {
+    const previous = appearance;
+    setAppearance(value);
+    if (!session?.user?.id) return;
+    try {
+      await updateUserSettings(session.user.id, { appearance: value });
+    } catch (error) {
+      setAppearance(previous);
+      Alert.alert('Could not save appearance', error.message || 'Please try again.');
+    }
+  };
+
+  const handleClearPurchases = async () => {
+    if (!session?.user?.id) return;
+    try {
+      await clearPurchases(session.user.id);
+      setPurchases([]);
+    } catch (error) {
+      Alert.alert('Could not clear history', error.message || 'Please try again.');
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      Alert.alert('Could not sign out', error.message || 'Please try again.');
+    }
+  };
+
+  if (!isSupabaseConfigured) return <BackendSetupRequired theme={theme} />;
   if (splash) return <Splash theme={theme} onDone={() => setSplash(false)} />;
-  if (!onboarded) return <Onboarding theme={theme} setTheme={setTheme} onFinish={() => setOnboarded(true)} setUserName={setUserName} selectedIds={selectedIds} setSelectedIds={setSelectedIds} rewardPreference={rewardPreference} setRewardPreference={setRewardPreference} />;
-  return <MainApp theme={theme} setTheme={setTheme} userName={userName} selectedIds={selectedIds} setSelectedIds={setSelectedIds} rewardPreference={rewardPreference} setRewardPreference={setRewardPreference} purchases={purchases} setPurchases={setPurchases} onReset={reset} />;
+  if (authLoading || dataLoading) return <LoadingScreen theme={theme} />;
+  if (backendError) return <BackendProblem theme={theme} message={backendError} onRetry={() => session?.user?.id ? hydrateUser(session.user.id) : setBackendError('')} onSignOut={session ? handleSignOut : null} />;
+  // A signed-in user should never render onboarding until their profile/settings have hydrated.
+  if (session && !profile) return <LoadingScreen theme={theme} />;
+
+  if (!session || !profile?.onboarding_completed) {
+    return <Onboarding
+      theme={theme}
+      appearance={appearance}
+      onAppearanceChange={handleAppearanceChange}
+      session={session}
+      onFinish={finishOnboarding}
+      userName={userName}
+      setUserName={setUserName}
+      selectedIds={selectedIds}
+      setSelectedIds={setSelectedIds}
+      rewardPreference={rewardPreference}
+      setRewardPreference={setRewardPreference}
+    />;
+  }
+
+  return <MainApp
+    theme={theme}
+    appearance={appearance}
+    onAppearanceChange={handleAppearanceChange}
+    userName={userName}
+    selectedIds={selectedIds}
+    rewardPreference={rewardPreference}
+    onRewardPreferenceChange={handleRewardPreferenceChange}
+    purchases={purchases}
+    onAddCard={handleAddCard}
+    onRemoveCard={handleRemoveCard}
+    onSavePurchase={handleSavePurchase}
+    onClearPurchases={handleClearPurchases}
+    onSignOut={handleSignOut}
+  />;
 }
 
 const styles = StyleSheet.create({

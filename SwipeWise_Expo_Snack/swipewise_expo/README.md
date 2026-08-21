@@ -1,43 +1,40 @@
-# SwipeWise — Expo / Snack conversion
+# SwipeWise — Expo + Supabase backend milestone
 
-This folder is a React Native / Expo conversion of the uploaded SwiftUI/Xcode v0.1 project.
+This is the existing SwipeWise Expo/React Native prototype upgraded to use a real Supabase development backend without redesigning the existing UI or replacing the deterministic recommendation engine.
 
-## Fastest way to run in Chrome with Snack
+## What is real now
 
-1. Open https://snack.expo.dev in Chrome.
-2. Create a new blank Snack.
-3. Open this folder's `App.js`.
-4. Copy all of `App.js` and replace the code in Snack's `App.js`.
-5. Click **Web** in Snack's preview panel.
-6. For iPhone testing, install **Expo Go** on the iPhone and use Snack's QR / device option.
+- Supabase email/password authentication
+- Persistent mobile auth sessions
+- Auto-created `profiles` and `user_settings` rows
+- Supabase-backed wallet (`user_cards`)
+- Supabase-backed purchase history (`purchases`)
+- Reward preference and appearance persistence
+- RLS user isolation
+- Public/reference card-data tables prepared for future verified Canadian card data
 
-This converted version deliberately uses only React + React Native APIs so there are no extra Snack dependencies to configure.
+## What is still demo / deferred
 
-## What was converted
+- Canadian reward percentages and point values in `App.js` are still DEMO ONLY
+- Nearby merchants are still demo data
+- Recommendation engine remains the existing deterministic local engine
+- Action Button/App Intents remain a later native-build task
+- Safari extension, Apple Pay and App Store work are not part of this milestone
 
-- Splash screen
-- Full onboarding flow
-- Manual card selection
-- Reward preference
-- Dark and light UI
-- Home dashboard
-- Wallet + card details + add/remove cards
-- Quick Swipe: In Store / Online
-- Merchant and category selection
-- Conditional amount entry
-- Recommendation ranking logic from the Swift project
-- Why This Card comparison
-- Override card selection
-- Purchase logging + history
-- Insights: overview, spending, rewards, impact, recommendations
-- Settings screens
-- Original demo Canadian card catalog / reward rules
-- Original Supabase schema copied into `backend/`
+## First setup
 
-## Native-only items not available inside Snack
+Read `SUPABASE_SETUP.md` and follow it in order.
 
-The original Swift project's App Intents / iPhone Action Button integration cannot run in Snack because those are native iOS APIs. They can be added back when the Expo project is moved to an EAS/native iOS build.
+The two SQL files are:
 
-## Important
+1. `backend/supabase_schema.sql`
+2. `backend/demo_seed.sql`
 
-Reward rates in this prototype are demo values carried over from the original project and are not intended for real financial decisions.
+The app expects these project-root environment variables:
+
+```text
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
+
+Never put a Supabase `service_role` key, `sb_secret_*` key, database password, or any other server secret in this Expo app.

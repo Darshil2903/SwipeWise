@@ -1,13 +1,20 @@
 {
   "name": "swipewise-expo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web"
+  },
   "dependencies": {
-    "expo": "*",
-    "react": "*",
-    "react-dom": "*",
-    "react-native": "*",
-    "react-native-web": "*"
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.0.0",
+    "expo": "~54.0.34",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-url-polyfill": "^3.0.0",
+    "react-native-web": "^0.21.0"
   }
 }
