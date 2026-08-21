@@ -1,11 +1,12 @@
 {
   "name": "swipewise-expo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test:engine": "node --experimental-default-type=module tests/recommendationEngine.test.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

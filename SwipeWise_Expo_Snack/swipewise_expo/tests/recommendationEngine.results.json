@@ -1,0 +1,1757 @@
+{
+  "scenario_count": 28,
+  "passed": 28,
+  "failed": 0,
+  "generated_at": "2026-08-18T00:57:43.531Z",
+  "cases": [
+    {
+      "name": "1 Costco warehouse",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "td-aeroplan"
+        ],
+        "context": {
+          "merchantName": "Costco",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Warehouse Purchase",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Mastercard"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [
+          "cibc-costco"
+        ],
+        "required_warning": null,
+        "required_reason": "BASE_REWARD",
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "costco-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "CASHBACK_PREFERENCE",
+          "HIGHEST_CASHBACK"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "NETWORK_NOT_ACCEPTED"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "2 Costco gas",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "td-aeroplan"
+        ],
+        "context": {
+          "merchantName": "Costco",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Costco Gas",
+          "rewardCategory": null,
+          "amount": 50,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Mastercard"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "cibc_costco_gas_ev_calendar_year": {
+            "amount": 1000,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": "MERCHANT_BONUS",
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "costco-gas"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "MERCHANT_BONUS",
+          "SHARED_CAP",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "CASHBACK_PREFERENCE",
+          "HIGHEST_CASHBACK"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "SHARED_CAP",
+          "NETWORK_NOT_ACCEPTED"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "3 generic grocery",
+      "input": {
+        "owned_cards": [
+          "cibc-aventura-visa",
+          "cibc-aventura-gold-visa",
+          "cibc-aventura-visa-infinite",
+          "cibc-aventura-visa-infinite-privilege"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Groceries",
+          "rewardCategory": "Groceries",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "grocery store"
+          ],
+          "merchantAttributes": {
+            "standalone": true
+          }
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "cibc_aventura_visa_accelerated": {
+            "amount": 0,
+            "authoritative": true
+          },
+          "cibc-aventura-gold-visa_accelerated_all_account_spend": {
+            "amount": 0,
+            "authoritative": true
+          },
+          "cibc-aventura-visa-infinite_accelerated_all_account_spend": {
+            "amount": 0,
+            "authoritative": true
+          },
+          "cibc_aventura_infinite_privilege_accelerated_all_account_spend": {
+            "amount": 0,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "cibc-aventura-visa-infinite-privilege",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-aventura-visa-infinite-privilege",
+        "ranked_order": [
+          "cibc-aventura-visa-infinite-privilege",
+          "cibc-aventura-gold-visa",
+          "cibc-aventura-visa-infinite",
+          "cibc-aventura-visa"
+        ],
+        "rules_used": [
+          "av-vip-grocery"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "POINT_VALUE_UNAVAILABLE",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "4 restaurant dining",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Dining / Restaurants",
+          "rewardCategory": "Dining / Restaurants",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "restaurant"
+          ]
+        },
+        "reward_preference": "Maximum Overall Value",
+        "point_valuations_present": [
+          "MEMBERSHIP_REWARDS_POINTS",
+          "AEROPLAN_POINTS",
+          "AVENTURA_POINTS",
+          "AVION_POINTS"
+        ],
+        "cap_usage": {
+          "amex_cobalt_5x_monthly": {
+            "amount": 0,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": "MAXIMUM_VALUE",
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "amex-dining"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "PURCHASE_PROTECTION",
+          "MAXIMUM_VALUE",
+          "HIGHEST_ESTIMATED_POINT_VALUE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP"
+        ],
+        "amount_required": false,
+        "data_confidence": "HIGH"
+      },
+      "passed": true
+    },
+    {
+      "name": "5 generic gas",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "td-aeroplan",
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Gas",
+          "rewardCategory": "Gas",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "gas station"
+          ],
+          "merchantAttributes": {
+            "standalone": true
+          }
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "cibc_costco_gas_ev_calendar_year": {
+            "amount": 0,
+            "authoritative": true
+          },
+          "td_aeroplan_accelerated": {
+            "amount": 0,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco",
+          "amex-cobalt",
+          "td-aeroplan"
+        ],
+        "rules_used": [
+          "costco-generic-gas"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "CASHBACK_PREFERENCE",
+          "HIGHEST_CASHBACK"
+        ],
+        "warning_codes": [
+          "SHARED_CAP",
+          "INCOMPARABLE_REWARD_CURRENCIES",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "6 electronics",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Electronics",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Maximum Overall Value",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": "MAXIMUM_VALUE",
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco",
+          "amex-cobalt"
+        ],
+        "rules_used": [
+          "costco-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "MOBILE_DEVICE_PROTECTION",
+          "PURCHASE_PROTECTION",
+          "MAXIMUM_VALUE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "7 Air Canada flight",
+      "input": {
+        "owned_cards": [
+          "td-aeroplan",
+          "rbc-avion"
+        ],
+        "context": {
+          "merchantName": "Air Canada",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Flight Ticket",
+          "rewardCategory": null,
+          "amount": 600,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa"
+          ]
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "td_aeroplan_accelerated": {
+            "amount": 0,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "td-aeroplan",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": "MERCHANT_BONUS",
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "td-aeroplan",
+        "ranked_order": [
+          "td-aeroplan",
+          "rbc-avion"
+        ],
+        "rules_used": [
+          "td-aircanada"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "MERCHANT_BONUS",
+          "SHARED_CAP",
+          "POINT_VALUE_UNAVAILABLE",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "SHARED_CAP",
+          "POINT_VALUE_UNAVAILABLE",
+          "INCOMPARABLE_REWARD_CURRENCIES"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "8 rental car",
+      "input": {
+        "owned_cards": [
+          "rbc-avion",
+          "cibc-aventura-visa-infinite"
+        ],
+        "context": {
+          "merchantName": "Rental Company",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Rental Car",
+          "rewardCategory": "Travel",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "car rental"
+          ]
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "rbc-avion",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": "RENTAL_COVERAGE",
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "rbc-avion",
+        "ranked_order": [
+          "rbc-avion",
+          "cibc-aventura-visa-infinite"
+        ],
+        "rules_used": [
+          "rbc-travel"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "POINT_VALUE_UNAVAILABLE",
+          "RENTAL_COVERAGE",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "POINT_VALUE_UNAVAILABLE",
+          "INCOMPARABLE_REWARD_CURRENCIES"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "9 online streaming",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Eligible Streamer",
+          "purchaseMode": "online",
+          "purchaseCategory": "Streaming",
+          "rewardCategory": "Streaming",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "conditions": {
+            "eligible_select_providers": true
+          }
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "amex-streaming"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "POINT_VALUE_UNAVAILABLE",
+          "PURCHASE_PROTECTION",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "10 in-store blocks online rule",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Eligible Streamer",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Streaming",
+          "rewardCategory": "Streaming",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "conditions": {
+            "eligible_select_providers": true
+          }
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco",
+          "amex-cobalt"
+        ],
+        "rules_used": [
+          "costco-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "CASHBACK_PREFERENCE",
+          "HIGHEST_CASHBACK"
+        ],
+        "warning_codes": [
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "11 purchase no amount",
+      "input": {
+        "owned_cards": [
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": null,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "costco-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "CASHBACK_PREFERENCE",
+          "HIGHEST_CASHBACK"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "12 amount-dependent winner",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Dining / Restaurants",
+          "rewardCategory": "Dining / Restaurants",
+          "amount": null,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "restaurant"
+          ]
+        },
+        "reward_preference": "Maximum Overall Value",
+        "point_valuations_present": [
+          "MEMBERSHIP_REWARDS_POINTS",
+          "AEROPLAN_POINTS",
+          "AVENTURA_POINTS",
+          "AVION_POINTS"
+        ],
+        "cap_usage": {
+          "amex_cobalt_5x_monthly": {
+            "amount": 2450,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": true
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "amex-dining"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "PURCHASE_PROTECTION",
+          "AMOUNT_REQUIRED",
+          "MAXIMUM_VALUE",
+          "HIGHEST_ESTIMATED_POINT_VALUE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP"
+        ],
+        "amount_required": true,
+        "data_confidence": "HIGH"
+      },
+      "passed": true
+    },
+    {
+      "name": "13 threshold boundary below",
+      "input": {
+        "owned_cards": [
+          "cibc-aventura-visa",
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 99.99,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": "BASE_REWARD",
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco",
+          "cibc-aventura-visa"
+        ],
+        "rules_used": [
+          "costco-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "CASHBACK_PREFERENCE",
+          "HIGHEST_CASHBACK"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "THRESHOLD_NOT_MET"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "14 threshold boundary met",
+      "input": {
+        "owned_cards": [
+          "cibc-aventura-visa",
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-aventura-visa",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-aventura-visa",
+        "ranked_order": [
+          "cibc-aventura-visa",
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "test-threshold"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "CASHBACK_PREFERENCE",
+          "HIGHEST_CASHBACK"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "15 cap before limit",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Dining / Restaurants",
+          "rewardCategory": "Dining / Restaurants",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "restaurant"
+          ]
+        },
+        "reward_preference": "Maximum Overall Value",
+        "point_valuations_present": [
+          "MEMBERSHIP_REWARDS_POINTS",
+          "AEROPLAN_POINTS",
+          "AVENTURA_POINTS",
+          "AVION_POINTS"
+        ],
+        "cap_usage": {
+          "amex_cobalt_5x_monthly": {
+            "amount": 2000,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "amex-dining"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "PURCHASE_PROTECTION",
+          "MAXIMUM_VALUE",
+          "HIGHEST_ESTIMATED_POINT_VALUE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP"
+        ],
+        "amount_required": false,
+        "data_confidence": "HIGH"
+      },
+      "passed": true
+    },
+    {
+      "name": "16 exact cap boundary",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Dining / Restaurants",
+          "rewardCategory": "Dining / Restaurants",
+          "amount": 1,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "restaurant"
+          ]
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "amex_cobalt_5x_monthly": {
+            "amount": 2499,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt"
+        ],
+        "rules_used": [
+          "amex-dining"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "POINT_VALUE_UNAVAILABLE",
+          "PURCHASE_PROTECTION",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "17 cap exceeded",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Dining / Restaurants",
+          "rewardCategory": "Dining / Restaurants",
+          "amount": 10,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "restaurant"
+          ]
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "amex_cobalt_5x_monthly": {
+            "amount": 2500,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": "CAP_REACHED",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt"
+        ],
+        "rules_used": [
+          "amex-dining"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "CAP_REACHED",
+          "POST_CAP_RATE_USED",
+          "POINT_VALUE_UNAVAILABLE",
+          "PURCHASE_PROTECTION",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP",
+          "CAP_REACHED",
+          "POST_CAP_RATE_USED",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "18 post-cap earning split",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Dining / Restaurants",
+          "rewardCategory": "Dining / Restaurants",
+          "amount": 20,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "restaurant"
+          ]
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "amex_cobalt_5x_monthly": {
+            "amount": 2490,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": "POST_CAP_RATE_USED",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt"
+        ],
+        "rules_used": [
+          "amex-dining"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "CAP_REACHED",
+          "POST_CAP_RATE_USED",
+          "POINT_VALUE_UNAVAILABLE",
+          "PURCHASE_PROTECTION",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP",
+          "CAP_REACHED",
+          "POST_CAP_RATE_USED",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "19 shared cap group",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Groceries",
+          "rewardCategory": "Groceries",
+          "amount": 10,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "grocery"
+          ],
+          "merchantAttributes": {
+            "standalone": true
+          }
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": {
+          "amex_cobalt_5x_monthly": {
+            "amount": 2495,
+            "authoritative": true
+          }
+        }
+      },
+      "expected": {
+        "winner": "amex-cobalt",
+        "alternative_order_prefix": [],
+        "required_warning": "SHARED_CAP",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "amex-cobalt",
+        "ranked_order": [
+          "amex-cobalt"
+        ],
+        "rules_used": [
+          "amex-grocery"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "SHARED_CAP",
+          "CAP_REACHED",
+          "POST_CAP_RATE_USED",
+          "POINT_VALUE_UNAVAILABLE",
+          "PURCHASE_PROTECTION",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP",
+          "CAP_REACHED",
+          "POST_CAP_RATE_USED",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "20 unsupported network",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "amex-cobalt",
+          "td-aeroplan"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Mastercard"
+          ]
+        },
+        "reward_preference": "Maximum Overall Value",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [
+          "cibc-costco"
+        ],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "costco-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "MAXIMUM_VALUE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "NETWORK_NOT_ACCEPTED"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "21 stale data",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "td-aeroplan"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "td-aeroplan",
+        "alternative_order_prefix": [],
+        "required_warning": "STALE_DATA_WARNING",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "td-aeroplan",
+        "ranked_order": [
+          "td-aeroplan",
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "td-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE",
+          "STALE_DATA_WARNING"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "22 uncertain data excluded",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "td-aeroplan"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "td-aeroplan",
+        "alternative_order_prefix": [],
+        "required_warning": "UNCERTAIN_DATA_WARNING",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "td-aeroplan",
+        "ranked_order": [
+          "td-aeroplan"
+        ],
+        "rules_used": [
+          "td-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE",
+          "UNCERTAIN_DATA_WARNING"
+        ],
+        "amount_required": false,
+        "data_confidence": "UNCERTAIN"
+      },
+      "passed": true
+    },
+    {
+      "name": "23 expired rule",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "td-aeroplan"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "td-aeroplan",
+        "alternative_order_prefix": [],
+        "required_warning": "RULE_NOT_EFFECTIVE",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "td-aeroplan",
+        "ranked_order": [
+          "td-aeroplan"
+        ],
+        "rules_used": [
+          "td-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE",
+          "RULE_NOT_EFFECTIVE",
+          "NO_VERIFIED_RULE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "24 future rule",
+      "input": {
+        "owned_cards": [
+          "cibc-costco",
+          "td-aeroplan"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Cashback",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "td-aeroplan",
+        "alternative_order_prefix": [],
+        "required_warning": "RULE_NOT_EFFECTIVE",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "td-aeroplan",
+        "ranked_order": [
+          "td-aeroplan"
+        ],
+        "rules_used": [
+          "td-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE",
+          "RULE_NOT_EFFECTIVE",
+          "NO_VERIFIED_RULE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "25 point valuation unavailable",
+      "input": {
+        "owned_cards": [
+          "td-aeroplan",
+          "rbc-avion"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Maximum Overall Value",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "rbc-avion",
+        "alternative_order_prefix": [],
+        "required_warning": "POINT_VALUE_UNAVAILABLE",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "rbc-avion",
+        "ranked_order": [
+          "rbc-avion",
+          "td-aeroplan"
+        ],
+        "rules_used": [
+          "rbc-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "POINT_VALUE_UNAVAILABLE",
+          "MAXIMUM_VALUE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE",
+          "INCOMPARABLE_REWARD_CURRENCIES"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "26 tied cards",
+      "input": {
+        "owned_cards": [
+          "cibc-aventura-gold-visa",
+          "cibc-aventura-visa-infinite"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-aventura-gold-visa",
+        "alternative_order_prefix": [
+          "cibc-aventura-gold-visa",
+          "cibc-aventura-visa-infinite"
+        ],
+        "required_warning": null,
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-aventura-gold-visa",
+        "ranked_order": [
+          "cibc-aventura-gold-visa",
+          "cibc-aventura-visa-infinite"
+        ],
+        "rules_used": [
+          "av-gold-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "POINT_VALUE_UNAVAILABLE",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "27 legacy verified owned product",
+      "input": {
+        "owned_cards": [
+          "cibc-aventura-visa",
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Other",
+          "rewardCategory": null,
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ]
+        },
+        "reward_preference": "Travel Points",
+        "point_valuations_present": [],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-aventura-visa",
+        "alternative_order_prefix": [],
+        "required_warning": "LEGACY_PRODUCT",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-aventura-visa",
+        "ranked_order": [
+          "cibc-aventura-visa",
+          "cibc-costco"
+        ],
+        "rules_used": [
+          "av-visa-base"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "BASE_REWARD",
+          "POINT_VALUE_UNAVAILABLE",
+          "TRAVEL_POINTS_PREFERENCE"
+        ],
+        "warning_codes": [
+          "LEGACY_PRODUCT",
+          "MERCHANT_CLASSIFICATION_REQUIRED",
+          "POINT_VALUE_UNAVAILABLE"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    },
+    {
+      "name": "28 unknown cap uses conservative rate",
+      "input": {
+        "owned_cards": [
+          "amex-cobalt",
+          "cibc-costco"
+        ],
+        "context": {
+          "merchantName": "Example Merchant",
+          "purchaseMode": "in_store",
+          "purchaseCategory": "Dining / Restaurants",
+          "rewardCategory": "Dining / Restaurants",
+          "amount": 100,
+          "purchaseDate": "2026-08-17T12:00:00Z",
+          "country": "CA",
+          "acceptedNetworks": [
+            "Visa",
+            "Mastercard",
+            "American Express"
+          ],
+          "merchantClassifications": [
+            "restaurant"
+          ]
+        },
+        "reward_preference": "Maximum Overall Value",
+        "point_valuations_present": [
+          "MEMBERSHIP_REWARDS_POINTS",
+          "AEROPLAN_POINTS",
+          "AVENTURA_POINTS",
+          "AVION_POINTS"
+        ],
+        "cap_usage": null
+      },
+      "expected": {
+        "winner": "cibc-costco",
+        "alternative_order_prefix": [],
+        "required_warning": "CAP_PROGRESS_UNKNOWN",
+        "required_reason": null,
+        "amount_required": false
+      },
+      "actual": {
+        "winner": "cibc-costco",
+        "ranked_order": [
+          "cibc-costco",
+          "amex-cobalt"
+        ],
+        "rules_used": [
+          "costco-dining"
+        ],
+        "reason_codes": [
+          "NETWORK_ACCEPTANCE",
+          "CATEGORY_BONUS",
+          "RELEVANT_EXTENDED_WARRANTY",
+          "PURCHASE_PROTECTION",
+          "MAXIMUM_VALUE"
+        ],
+        "warning_codes": [
+          "SHARED_CAP",
+          "CAP_PROGRESS_UNKNOWN",
+          "LOGGED_PURCHASES_ONLY",
+          "POST_CAP_RATE_USED"
+        ],
+        "amount_required": false,
+        "data_confidence": "LIMITED"
+      },
+      "passed": true
+    }
+  ]
+}

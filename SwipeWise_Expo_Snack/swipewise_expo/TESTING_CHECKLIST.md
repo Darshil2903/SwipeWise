@@ -1,23 +1,48 @@
-# SwipeWise Backend Milestone Test Checklist
+# SwipeWise Recommendation Engine v1 + Backend Test Checklist
 
-Use this after `supabase_schema.sql`, `demo_seed.sql`, `.env`, `npm install`, and `npx expo start` are complete.
+## Automated deterministic engine tests
 
-- [ ] Start SwipeWise in Expo Go.
-- [ ] Create Test User A.
-- [ ] Supabase Dashboard → Authentication → Users shows User A.
-- [ ] Table Editor → `profiles` has User A's UUID and display name.
-- [ ] Table Editor → `user_settings` has User A's UUID.
-- [ ] Complete onboarding and add at least one demo card product.
-- [ ] Table Editor → `user_cards` has User A's wallet row(s).
-- [ ] Close Expo Go completely, reopen SwipeWise, and confirm User A is still signed in.
-- [ ] Run Quick Swipe and log a test purchase.
-- [ ] Table Editor → `purchases` has the new row.
-- [ ] Open SwipeWise History and confirm the purchase loads from Supabase.
-- [ ] Sign out.
-- [ ] Create Test User B.
-- [ ] Confirm User B's wallet and History do not show User A's data.
-- [ ] Add a different card/purchase for User B and confirm only User B sees it.
-- [ ] Sign out and sign back in as User A.
-- [ ] Confirm User A's original wallet and purchase history return.
+- [ ] Run `npm run test:engine`.
+- [ ] Confirm all 28 scenarios pass.
+- [ ] Review `tests/recommendationEngine.results.json` for exact ranked order, rules, reasons, warnings, and amount requirement.
 
-If any step fails, record the exact screen, error message, and which Supabase table did or did not change before troubleshooting.
+## Supabase reference-data integration
+
+- [ ] App loads active verified exact card products from `card_products`.
+- [ ] App loads verified reward rows from `reward_rules`.
+- [ ] App loads verified benefits from `card_benefits`.
+- [ ] Old ambiguous `cibc-aventura` does not appear as an addable verified product.
+- [ ] Wallet onboarding/add-card uses canonical exact product names.
+- [ ] Best Card evaluates only products present in the signed-in user's `user_cards`.
+- [ ] Removing a wallet card removes it from checkout candidates.
+- [ ] A reference refresh failure with an existing cache shows stale-cache warning behavior.
+
+## Quick Swipe regression
+
+- [ ] In Store and Online remain explicit first choices.
+- [ ] Online-only reward rule does not apply to an In Store purchase.
+- [ ] Merchant-specific verified rule beats category/base rules when applicable.
+- [ ] Category rule does not apply when required merchant/MCC classification is unavailable; warning is shown instead.
+- [ ] Amount screen appears only when a known amount-dependent rule can change the winner.
+- [ ] Unknown cap progress does not pretend the cap is unused.
+- [ ] Post-cap rate is used when the cap is known reached.
+- [ ] Shared cap groups are treated as one cap.
+- [ ] Expired/future rules do not apply.
+- [ ] Temporary rules apply only inside their effective dates and when all material conditions are known.
+- [ ] Unsupported networks cannot win.
+- [ ] Unknown acceptance is warned, not silently asserted.
+- [ ] Point currencies stay separate.
+- [ ] No point cash-equivalent is displayed unless a separate SwipeWise valuation exists.
+- [ ] Insurance coverage limits are never added as reward dollars.
+- [ ] `Why This Card` uses deterministic reason/warning codes and verified source metadata.
+
+## Persistence / RLS regression
+
+- [ ] Create Test User A; add cards; log a purchase.
+- [ ] Confirm `user_cards` and `purchases` rows exist for User A.
+- [ ] Close/reopen Expo Go and confirm session/wallet/history persist.
+- [ ] Sign out and create Test User B.
+- [ ] Confirm User B cannot see User A wallet/history.
+- [ ] Sign back in as User A and confirm original data returns.
+
+If a test fails, record exact input context, owned card slugs, expected winner, actual winner, rule IDs, reason codes, warning codes, and the relevant Supabase rows before changing logic.

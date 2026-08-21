@@ -1,140 +1,83 @@
 # SwipeWise Supabase Setup — Windows + VS Code + iPhone
 
-Follow this file in order. The app will show a "Connect Supabase" screen until `.env` contains your real development-project values.
+This project expects the SwipeWise development Supabase backend plus the verified Chat 05 Canadian card-data migration.
 
-## 1. Create the Supabase development project
+## 1. Database state required
 
-1. Open the Supabase Dashboard and create a new project.
-2. Recommended project name: `SwipeWise Development`.
-3. Choose a strong database password and save it in your password manager. It does **not** go into the Expo app.
-4. Choose the region closest to you for development.
-5. Wait until the database is ready.
+For an existing SwipeWise development project, confirm the following are already present:
 
-## 2. Run the SwipeWise database SQL
+- Base schema from `backend/supabase_schema.sql`
+- Auth/profile/settings/wallet/purchase RLS baseline
+- Chat 05 verified migration: `SwipeWise_verified_card_data_v1_2026_08_17.sql`
 
-In Supabase Dashboard:
+The verified migration extends `card_products`, `reward_rules`, and `card_benefits` and loads the initial exact verified products/rules/benefits. It was intentionally kept as the Chat 05 source-of-truth migration and is not re-authored by Chat 06.
 
-1. Open **SQL Editor**.
-2. Create a new query.
-3. In VS Code, open `backend/supabase_schema.sql`.
-4. Copy the entire file into the Supabase SQL Editor.
-5. Click **Run**.
-6. Create another new SQL query.
-7. Open `backend/demo_seed.sql` in VS Code.
-8. Copy the entire file into the SQL Editor.
-9. Click **Run**.
+**Do not run `backend/demo_seed.sql` on a database that already has the verified Chat 05 data.** It is retained only as historical development material.
 
-The demo seed only creates the five demo card-product identities required for the current wallet prototype. It does not insert demo reward percentages into Supabase.
+## 2. Client-safe Supabase values
 
-## 3. Development email-confirmation setting
+From Supabase Dashboard copy only:
 
-Hosted Supabase projects normally require email confirmation before a new user receives a session. For this first development milestone, you may temporarily disable **Confirm Email** in the Email Auth provider settings so Create Account signs in immediately.
-
-Turn confirmation back on later when SwipeWise implements the production email deep-link flow.
-
-## 4. Get the client-safe Supabase values
-
-In the Supabase project, open the **Connect** dialog or **Project Settings → API Keys**.
-
-Copy only:
-
-- **Project URL** — looks like `https://xxxxxxxx.supabase.co`
-- **Publishable key** — normally starts with `sb_publishable_`
+- Project URL
+- Publishable key (`sb_publishable_...`)
 
 Do not copy a secret key, `sb_secret_*`, legacy `service_role`, database password, or JWT signing secret into Expo.
 
-## 5. Open the project in VS Code
+## 3. Create `.env`
 
-1. Extract the SwipeWise ZIP to a normal folder on your Windows computer.
-2. Open VS Code.
-3. Click **File → Open Folder**.
-4. Choose the extracted `swipewise_expo` folder — the folder containing `App.js`, `package.json`, and `app.json`.
-
-## 6. Install dependencies
-
-In VS Code:
-
-**Terminal → New Terminal**
-
-Make sure the terminal path ends in your `swipewise_expo` project folder, then run:
-
-```bash
-npm install
-```
-
-After that finishes, run this in the same VS Code terminal:
-
-```bash
-npx expo install @supabase/supabase-js @react-native-async-storage/async-storage react-native-url-polyfill
-```
-
-The second command lets Expo verify/install compatible versions of the Supabase React Native dependencies for the project's Expo SDK. This project is pinned to Expo SDK 54 for the simplest physical-iPhone Expo Go test from the Apple App Store at this milestone.
-
-## 7. Create `.env`
-
-In the VS Code Explorer, in the same folder as `App.js` and `package.json`:
-
-1. Create a new file named exactly `.env`.
-2. Paste:
+At the project root:
 
 ```text
 EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY_HERE
 ```
 
-3. Replace the URL with your Supabase Project URL.
-4. Replace the key with your Supabase Publishable key.
-5. Save the file.
+`.env` is ignored by `.gitignore`.
 
-`.env` is already ignored by `.gitignore`.
-
-## 8. Start SwipeWise
-
-In VS Code:
-
-**Terminal → New Terminal**
-
-Run this from the `swipewise_expo` project folder:
+## 4. Install and start
 
 ```bash
+npm install
 npx expo start
 ```
 
-If you changed `.env` while Expo was already running, stop Expo with `Ctrl+C` and run `npx expo start` again.
+If Expo dependency alignment is needed:
 
-## 9. Open on iPhone
+```bash
+npx expo install @supabase/supabase-js @react-native-async-storage/async-storage react-native-url-polyfill
+```
 
-1. Install/open **Expo Go** on your iPhone.
-2. Keep the Windows PC and iPhone on the same network when possible.
-3. Use the QR code shown by Expo CLI to open SwipeWise in Expo Go.
-4. If LAN discovery does not work, return to **VS Code → Terminal → New Terminal** in the `swipewise_expo` folder and run:
+For tunnel mode if LAN discovery fails:
 
 ```bash
 npm i -g @expo/ngrok
-```
-
-Then run, in that same terminal and same project folder:
-
-```bash
 npx expo start --tunnel
 ```
 
-Scan the new QR code.
+## 5. Verify Recommendation Engine reference access
 
-## 10. Verify data in Supabase
+After signing in, SwipeWise should be able to read active verified reference rows from:
 
-Use these Dashboard areas:
+- `card_products`
+- `reward_rules`
+- `card_benefits`
 
-- **Authentication → Users**: confirms account creation.
-- **Table Editor → profiles**: confirms the profile trigger worked.
-- **Table Editor → user_settings**: confirms default settings were created.
-- **Table Editor → user_cards**: confirms wallet selections were saved.
-- **Table Editor → purchases**: confirms purchase logging worked.
+The app caches this public/reference data for one hour. If refresh fails but a prior cache exists, it can use the stale cache and surfaces a warning.
 
-## 11. First security test
+The wallet itself remains user-specific through `user_cards`; checkout ranking evaluates only wallet products.
 
-Create User A, add a card and log a purchase. Sign out. Create User B.
+## 6. Verify user data
 
-User B's SwipeWise wallet/history should be empty. Then sign back in as User A and User A's wallet/history should return.
+Use Supabase Dashboard to check:
 
-That behavior is enforced by Supabase Row Level Security, not by simply hiding rows in the UI. Note: **Supabase Table Editor is an admin view**, so it can show rows for both users. The isolation test is that User B's authenticated app session cannot query User A's rows.
+- Authentication → Users
+- `profiles`
+- `user_settings`
+- `user_cards`
+- `purchases`
+
+Create User A and User B and verify each authenticated app session can see only its own private rows. The Supabase Table Editor is an admin view and can show rows for both users.
+
+## 7. Development email confirmation
+
+If the existing development project currently has email confirmation disabled for testing, keep that as the previously approved development-only setup. Re-enable/implement the production email verification flow before launch.

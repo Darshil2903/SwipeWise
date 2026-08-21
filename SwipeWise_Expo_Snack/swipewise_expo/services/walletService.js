@@ -5,8 +5,10 @@ async function getCardProductsBySlugs(slugs) {
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from('card_products')
-    .select('id, slug')
-    .in('slug', slugs);
+    .select('id, slug, active, data_status, product_status, verification_status')
+    .in('slug', slugs)
+    .eq('active', true)
+    .eq('data_status', 'verified');
 
   if (error) throw error;
   return data || [];
@@ -28,7 +30,7 @@ export async function getWalletCardSlugs(userId) {
 export async function addWalletCard(userId, cardSlug) {
   const supabase = requireSupabase();
   const [product] = await getCardProductsBySlugs([cardSlug]);
-  if (!product) throw new Error(`Card product "${cardSlug}" is not present in Supabase. Run backend/demo_seed.sql first.`);
+  if (!product) throw new Error(`Card product "${cardSlug}" is not an active verified product in Supabase.`);
 
   const { error } = await supabase.from('user_cards').upsert(
     {
@@ -63,7 +65,7 @@ export async function syncWallet(userId, cardSlugs) {
   if (products.length !== cardSlugs.length) {
     const found = new Set(products.map((p) => p.slug));
     const missing = cardSlugs.filter((slug) => !found.has(slug));
-    throw new Error(`These demo card products are missing in Supabase: ${missing.join(', ')}. Run backend/demo_seed.sql.`);
+    throw new Error(`These card products are not active verified Supabase products: ${missing.join(', ')}.`);
   }
 
   const { data: existing, error: existingError } = await supabase

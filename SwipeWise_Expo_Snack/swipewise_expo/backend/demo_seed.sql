@@ -1,3 +1,8 @@
+-- LEGACY / HISTORICAL DEVELOPMENT FILE — DO NOT RUN ON THE VERIFIED V1 DATABASE.
+-- Chat 05 replaced these demo identities with exact verified product data.
+-- This file is retained only to document the earlier backend milestone.
+-- Recommendation Engine v1 does not consume demo financial facts.
+
 -- SwipeWise DEMO reference seed
 -- Run AFTER backend/supabase_schema.sql.
 --

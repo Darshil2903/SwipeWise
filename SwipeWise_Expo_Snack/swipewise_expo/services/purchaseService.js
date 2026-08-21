@@ -19,7 +19,7 @@ export async function createPurchase(userId, purchase) {
   const ids = await cardIdMap([purchase.recommendedCardId, purchase.usedCardId]);
 
   if (!ids[purchase.recommendedCardId] || !ids[purchase.usedCardId]) {
-    throw new Error('The recommended or used card is missing from Supabase reference data. Run backend/demo_seed.sql.');
+    throw new Error('The recommended or used card is missing from Supabase reference data.');
   }
 
   const row = {

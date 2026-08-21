@@ -1,3 +1,8 @@
+-- NOTE (Recommendation Engine v1): this is the original base schema.
+-- The live development database is additionally extended by Chat 05 migration
+-- SwipeWise_verified_card_data_v1_2026_08_17.sql. Do not infer that the absence
+-- of those later columns in this baseline file means they are absent live.
+
 -- SwipeWise development/production-ready Supabase schema
 -- Run this in: Supabase Dashboard -> SQL Editor -> New query -> Run
 --

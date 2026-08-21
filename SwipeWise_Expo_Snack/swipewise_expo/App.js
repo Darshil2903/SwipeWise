@@ -27,6 +27,9 @@ import {
 } from './services/profileService';
 import { addWalletCard, getWalletCardSlugs, removeWalletCard, syncWallet } from './services/walletService';
 import { clearPurchases, createPurchase, getPurchases } from './services/purchaseService';
+import { getVerifiedReferenceData } from './services/cardReferenceService';
+import { recommendCards, WARNING_CODES } from './engine/recommendationEngine';
+import { productionPointValuations } from './engine/pointValuations';
 
 const BLUE = '#0798ff';
 const CYAN = '#35d8ff';
@@ -34,49 +37,16 @@ const GREEN = '#2ee6a6';
 const RED = '#ff6b7a';
 
 const categories = [
-  'Groceries', 'Gas', 'Dining / Restaurants', 'Shopping', 'Electronics', 'Travel',
-  'Flight Ticket', 'Hotel', 'Rental Car', 'Pharmacy', 'Beauty', 'Clothing',
-  'Home', 'Subscriptions', 'Other',
+  'Groceries', 'Gas', 'Electric Vehicle Charging', 'Dining / Restaurants', 'Shopping', 'Electronics', 'Travel',
+  'Flight Ticket', 'Hotel', 'Rental Car', 'Pharmacy', 'Drug Stores', 'Beauty', 'Clothing',
+  'Home', 'Subscriptions', 'Streaming', 'Food / Grocery Delivery', 'Transit / Ride Share',
+  'Transportation', 'Entertainment', 'Warehouse Purchase', 'Costco Gas', 'Other',
 ];
 
-const cards = [
-  {
-    id: 'cibc-costco', bank: 'CIBC', name: 'Costco Mastercard', network: 'Mastercard', last4: '1234', fee: 0, accent: '#B51225',
-    benefits: ['Purchase protection', 'Extended warranty'],
-    rules: {
-      Gas: ['cashback', 3, 1], 'Dining / Restaurants': ['cashback', 3, 1], Groceries: ['cashback', 1, 1],
-      Shopping: ['cashback', 1, 1], Electronics: ['cashback', 1, 1], Other: ['cashback', 1, 1],
-    },
-  },
-  {
-    id: 'cibc-aventura', bank: 'CIBC', name: 'Aventura Visa', network: 'Visa', last4: '1134', fee: 139, accent: '#0071C8',
-    benefits: ['Flight delay insurance', 'Lost baggage coverage', 'Trip interruption coverage', 'Rental vehicle coverage', 'Purchase protection'],
-    rules: {
-      Travel: ['points', 2, 1.15], 'Flight Ticket': ['points', 2, 1.15], Hotel: ['points', 2, 1.15],
-      'Rental Car': ['points', 2, 1.15], Other: ['points', 1, 1.15],
-    },
-  },
-  {
-    id: 'td-aeroplan', bank: 'TD', name: 'Aeroplan Visa Infinite', network: 'Visa', last4: '5678', fee: 139, accent: '#138A65',
-    benefits: ['Travel insurance', 'Purchase protection'],
-    rules: {
-      Groceries: ['points', 1.5, 1.6], Gas: ['points', 1.5, 1.6], 'Flight Ticket': ['points', 1.5, 1.6], Other: ['points', 1, 1.6],
-    },
-  },
-  {
-    id: 'rbc-avion', bank: 'RBC', name: 'Avion Visa Infinite', network: 'Visa', last4: '9012', fee: 120, accent: '#1E5FC4',
-    benefits: ['Travel insurance', 'Purchase security'],
-    rules: { Travel: ['points', 1.25, 1.5], Shopping: ['points', 1, 1.5], Other: ['points', 1, 1.5] },
-  },
-  {
-    id: 'amex-cobalt', bank: 'American Express', name: 'Cobalt Card', network: 'American Express', last4: '4455', fee: 155.88, accent: '#247EB5',
-    benefits: ['Mobile device insurance', 'Purchase protection', 'Travel accident coverage'],
-    rules: { Groceries: ['points', 5, 1], 'Dining / Restaurants': ['points', 5, 1], Travel: ['points', 2, 1], Other: ['points', 1, 1] },
-  },
-];
-
+// Merchant discovery is still a later Chat 07 milestone. These entries are UI-only
+// test merchants; they contain no reward percentages, point values, fees or benefits.
 const nearbyMerchants = [
-  ['Costco', '0.4 km', ['Groceries', 'Gas', 'Pharmacy', 'Electronics', 'Dining / Restaurants', 'Other']],
+  ['Costco', '0.4 km', ['Warehouse Purchase', 'Costco Gas', 'Pharmacy', 'Optical', 'Food Court', 'Other']],
   ['Walmart Supercentre', '0.7 km', ['Groceries', 'Electronics', 'Home', 'Clothing', 'Other']],
   ['Best Buy', '1.2 km', ['Electronics', 'Shopping', 'Other']],
   ['Shoppers Drug Mart', '1.6 km', ['Pharmacy', 'Beauty', 'Groceries', 'Electronics', 'Other']],
@@ -92,29 +62,58 @@ const onlineMerchants = [
   ['WestJet', ['Flight Ticket', 'Travel', 'Other']],
 ].map((m, i) => ({ id: `online-${i}`, name: m[0], subtitle: 'Online', categories: m[1] }));
 
-const shouldAskAmount = (category) => ['Electronics', 'Flight Ticket', 'Travel', 'Rental Car', 'Hotel'].includes(category);
 const money = (n) => `$${Number(n || 0).toFixed(2)}`;
 
-function relevantBenefits(benefits, category) {
-  const keys = category === 'Rental Car' ? ['rental', 'vehicle']
-    : ['Flight Ticket', 'Travel', 'Hotel'].includes(category) ? ['travel', 'flight', 'baggage', 'trip', 'accident']
-    : category === 'Electronics' ? ['warranty', 'purchase', 'device']
-    : ['purchase', 'warranty'];
-  return benefits.filter((b) => keys.some((k) => b.toLowerCase().includes(k))).slice(0, 4);
+const normalizeAmountText = (value) => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return '';
+  if (trimmed === '.') return '0.';
+  return /^\d+(?:\.\d{0,2})?$/.test(trimmed) ? trimmed : null;
+};
+
+const parseAmountText = (value) => {
+  const normalized = normalizeAmountText(value);
+  if (normalized == null || normalized === '') return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const verifiedDate = (value) => value ? new Date(value).toLocaleDateString() : 'Not available';
+
+function rewardLabel(candidate) {
+  if (!candidate) return 'Reward data unavailable';
+  if (candidate.rewardKind === 'cashback') return `${Number(candidate.rewardRate || 0).toFixed(2).replace(/\.00$/, '')}% cashback`;
+  if (candidate.rewardKind === 'points') return `${Number(candidate.rewardRate || 0).toFixed(2).replace(/\.00$/, '')}× ${friendlyRewardCurrency(candidate.rewardCurrency)}`;
+  return 'Reward data unavailable';
 }
 
-function rankCards(wallet, category, amount, preference) {
-  return wallet.map((card) => {
-    const rule = card.rules[category] || card.rules.Other;
-    const [kind, rate, pointValue] = rule;
-    const percent = kind === 'cashback' ? rate : rate * pointValue;
-    const benefits = relevantBenefits(card.benefits, category);
-    const reward = amount ? amount * percent / 100 : null;
-    const benefitScore = preference === 'Cashback' ? 0 : benefits.length * 0.22;
-    const bonus = preference === 'Cashback' ? (kind === 'cashback' ? 0.45 : -0.15)
-      : preference === 'Travel Points' ? (kind === 'points' ? 0.45 : 0) : 0;
-    return { card, kind, rate, percent, benefits, reward, score: percent + benefitScore + bonus };
-  }).sort((a, b) => b.score - a.score);
+function friendlyRewardCurrency(value) {
+  return ({
+    AEROPLAN_POINTS: 'Aeroplan points',
+    AVENTURA_POINTS: 'Aventura points',
+    AVION_POINTS: 'Avion points',
+    MEMBERSHIP_REWARDS_POINTS: 'Membership Rewards points',
+    WORLD_OF_HYATT_POINTS: 'World of Hyatt points',
+    CAD_CASHBACK: 'cashback',
+  })[value] || String(value || 'points').replaceAll('_', ' ').toLowerCase();
+}
+
+function warningText(code) {
+  return ({
+    [WARNING_CODES.ACCEPTANCE_UNKNOWN]: 'Merchant card-network acceptance is not confirmed yet.',
+    [WARNING_CODES.POINT_VALUE_UNAVAILABLE]: 'No SwipeWise point valuation is configured for this reward currency, so no cash-equivalent value is invented.',
+    [WARNING_CODES.CAP_PROGRESS_UNKNOWN]: 'Cap usage cannot be fully verified from optional SwipeWise purchase logs, so the engine uses a conservative rate.',
+    [WARNING_CODES.CAP_PERIOD_UNRESOLVED]: 'The issuer cap period cannot be derived safely from the current data.',
+    [WARNING_CODES.MERCHANT_CLASSIFICATION_REQUIRED]: 'A verified merchant/MCC classification is needed before an accelerated category rate can be applied.',
+    [WARNING_CODES.STALE_DATA_WARNING]: 'Some reference data is marked stale.',
+    [WARNING_CODES.UNCERTAIN_DATA_WARNING]: 'Some reference data is uncertain and was not silently treated as verified.',
+    [WARNING_CODES.CACHE_STALE]: 'Using cached verified reference data because the latest refresh failed.',
+    [WARNING_CODES.POST_CAP_RATE_USED]: 'A post-cap or conservative fallback rate is being used.',
+    [WARNING_CODES.SHARED_CAP]: 'This reward rule shares a spending cap with other categories.',
+    [WARNING_CODES.TEMPORARY_PROMOTION]: 'A time-limited verified rule applies to this purchase context.',
+    [WARNING_CODES.LOGGED_PURCHASES_ONLY]: 'Cap tracking uses only purchases voluntarily logged in SwipeWise.',
+    [WARNING_CODES.BENEFIT_CONDITIONS_APPLY]: 'Relevant protections have eligibility/payment/certificate conditions; coverage is not guaranteed by this recommendation.',
+  })[code] || code.replaceAll('_', ' ').toLowerCase();
 }
 
 function AppShell({ theme, children }) {
@@ -196,7 +195,7 @@ function CardVisual({ t, card, compact = false }) {
       <Text style={styles.cardName}>{card.name}</Text>
       <View style={{ flex: 1 }} />
       <View style={styles.cardBottom}>
-        <Text style={styles.cardLast}>•••• {card.last4}</Text>
+        <Text style={styles.cardLast}>Card product</Text>
         <Text style={styles.cardNetwork}>{card.network}</Text>
       </View>
     </View>
@@ -206,7 +205,7 @@ function CardVisual({ t, card, compact = false }) {
 function DemoBanner({ t }) {
   return (
     <View style={[styles.demo, { borderColor: '#d99c21' }]}>
-      <Text style={{ color: '#e8aa2e', fontSize: 11 }}>⚠ Prototype uses demo reward rates — do not use for real financial decisions yet.</Text>
+      <Text style={{ color: '#e8aa2e', fontSize: 11 }}>⚠ Nearby merchant discovery is still demo-only. Financial reward rules come from verified Supabase reference data.</Text>
     </View>
   );
 }
@@ -263,7 +262,7 @@ function BackendProblem({ theme, message, onRetry, onSignOut }) {
         <View style={{ minHeight: 70 }} />
         <Header t={t} title="Supabase setup needs attention" subtitle="SwipeWise connected to Supabase, but one of the required database operations failed." />
         <Glass t={t}><Text style={{ color: RED, fontWeight: '700' }}>{message}</Text></Glass>
-        <Text style={{ color: t.secondary }}>Make sure you ran backend/supabase_schema.sql first and backend/demo_seed.sql second in Supabase SQL Editor.</Text>
+        <Text style={{ color: t.secondary }}>Make sure the base Supabase schema and the Chat 05 verified card-data migration are applied, and that reference-table RLS allows verified rows to be read.</Text>
         <Button t={t} title="Try Again" onPress={onRetry} />
         {onSignOut ? <Button t={t} title="Sign Out" secondary onPress={onSignOut} /> : null}
       </ScrollView>
@@ -299,6 +298,7 @@ function Onboarding({
   setSelectedIds,
   rewardPreference,
   setRewardPreference,
+  catalog,
 }) {
   const t = makeTheme(theme);
   const [stage, setStage] = useState(session ? 2 : 0);
@@ -440,16 +440,16 @@ function Onboarding({
         </>}
 
         {stage === 4 && <>
-          <Header t={t} title="Select Card Type" subtitle="Current catalog entries are demo product identities for backend testing." />
+          <Header t={t} title="Select Card Type" subtitle="Choose the exact verified card product you own." />
           {['Credit Card', 'Debit Card', 'Prepaid Card', 'Store Card'].map((x) => <RowButton key={x} t={t} title={x} onPress={() => {}} />)}
           <Text style={[styles.sectionTitle, { color: t.text }]}>Card Catalog</Text>
-          {cards.map((c) => <RowButton key={c.id} t={t} title={`${c.bank} ${c.name}`} subtitle="Demo product reference" selected={setupIds.includes(c.id)} onPress={() => toggleCard(c.id)} />)}
+          {catalog.map((c) => <RowButton key={c.id} t={t} title={c.name} subtitle={`${c.network} • verified ${verifiedDate(c.verifiedAt)}`} selected={setupIds.includes(c.id)} onPress={() => toggleCard(c.id)} />)}
           <Button t={t} title="Done" onPress={() => setStage(3)} />
         </>}
 
         {stage === 5 && <>
           <Header t={t} title="Your Wallet" subtitle={`${setupIds.length} Card${setupIds.length === 1 ? '' : 's'} Added`} />
-          {cards.filter((c) => setupIds.includes(c.id)).map((c) => <CardVisual key={c.id} t={t} card={c} compact />)}
+          {catalog.filter((c) => setupIds.includes(c.id)).map((c) => <CardVisual key={c.id} t={t} card={c} compact />)}
           <View style={{ flex: 1, minHeight: 90 }} />
           <Button t={t} title="Continue" disabled={!setupIds.length} onPress={() => { setSelectedIds(setupIds); next(); }} />
         </>}
@@ -500,7 +500,7 @@ function Field({ t, ...props }) {
   return <TextInput placeholderTextColor={t.secondary} style={[styles.input, { color: t.text, backgroundColor: t.input, borderColor: t.border }]} {...props} />;
 }
 
-function QuickSwipe({ theme, wallet, rewardPreference, onClose, onSave }) {
+function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta, onClose, onSave }) {
   const t = makeTheme(theme);
   const [step, setStep] = useState('mode');
   const [mode, setMode] = useState(null);
@@ -512,23 +512,59 @@ function QuickSwipe({ theme, wallet, rewardPreference, onClose, onSave }) {
   const [why, setWhy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const amount = Number(amountText.replace(/[^0-9.]/g, '')) || null;
-  const ranked = useMemo(() => rankCards(wallet, category, amount, rewardPreference), [wallet, category, amountText, rewardPreference]);
-  const best = ranked[0];
+  const amount = parseAmountText(amountText);
+  const handleAmountTextChange = (value) => {
+    const normalized = normalizeAmountText(value);
+    if (normalized != null) setAmountText(normalized);
+  };
+
+  const buildResult = (nextCategory = category, nextAmount = amount) => recommendCards({
+    cards: wallet,
+    context: {
+      merchantName: merchant?.name || '',
+      purchaseMode: mode,
+      purchaseCategory: nextCategory,
+      // Chat 07 will later provide verified MCC/network/category and acceptance data.
+      // Do not treat the user's item category as an issuer merchant classification.
+      rewardCategory: merchant?.rewardCategory || null,
+      acceptedNetworks: merchant?.acceptedNetworks || null,
+      merchantClassifications: merchant?.merchantClassifications || [],
+      merchantAttributes: merchant?.merchantAttributes || {},
+      amount: nextAmount,
+      purchaseDate: new Date().toISOString(),
+      country: 'CA',
+    },
+    rewardPreference,
+    pointValuations: productionPointValuations,
+    purchases,
+    referenceMeta,
+  });
+
+  const result = useMemo(
+    () => buildResult(category, amount),
+    [wallet, category, amountText, rewardPreference, merchant, mode, purchases, referenceMeta]
+  );
+  const ranked = result.ranked_cards || [];
+  const best = ranked[0] || null;
+  const bestCard = best ? wallet.find((card) => card.id === best.cardSlug) : null;
 
   const pickMerchant = (m) => { setMerchant(m); setStep('category'); };
-  const pickCategory = (c) => { setCategory(c); setStep(shouldAskAmount(c) ? 'amount' : 'best'); };
+  const pickCategory = (c) => {
+    setCategory(c);
+    const preview = buildResult(c, null);
+    setStep(preview.amount_required ? 'amount' : 'best');
+  };
 
   const save = async () => {
     if (!best || !usedCard || !merchant || saving) return;
-    const r = ranked.find((x) => x.card.id === usedCard.id);
+    const used = ranked.find((candidate) => candidate.cardSlug === usedCard.id);
     setSaveError('');
     setSaving(true);
     try {
       await onSave({
         id: `${Date.now()}`, date: new Date().toISOString(), mode, merchant: merchant.name, category,
-        amount, recommendedCardId: best.card.id, usedCardId: usedCard.id,
-        reward: r?.reward ?? null, followed: usedCard.id === best.card.id, overrideReason: null, notes,
+        amount, recommendedCardId: best.cardSlug, usedCardId: usedCard.id,
+        reward: used?.estimatedRewardValue ?? null, followed: usedCard.id === best.cardSlug, overrideReason: null, notes,
       });
       setStep('saved');
     } catch (error) {
@@ -550,7 +586,7 @@ function QuickSwipe({ theme, wallet, rewardPreference, onClose, onSave }) {
           </>}
 
           {step === 'merchant' && <>
-            <Header t={t} title={mode === 'In Store' ? 'Nearby Stores' : 'Where are you shopping?'} subtitle={mode === 'In Store' ? 'Demo nearby merchants' : 'Select an online merchant'} />
+            <Header t={t} title={mode === 'In Store' ? 'Nearby Stores' : 'Where are you shopping?'} subtitle={mode === 'In Store' ? 'Demo nearby merchants; financial rules are verified Supabase data' : 'Select an online merchant'} />
             {(mode === 'In Store' ? nearbyMerchants : onlineMerchants).map((m) => <RowButton key={m.id} t={t} title={m.name} subtitle={m.subtitle} onPress={() => pickMerchant(m)} />)}
             <RowButton t={t} title="Other (Enter Manually)" onPress={() => pickMerchant({ id: 'other', name: 'Other Merchant', subtitle: mode, categories })} />
           </>}
@@ -561,68 +597,71 @@ function QuickSwipe({ theme, wallet, rewardPreference, onClose, onSave }) {
           </>}
 
           {step === 'amount' && <>
-            <Header t={t} title="How much is your purchase?" subtitle="Optional — this helps compare estimated reward value." />
-            <Field t={t} value={amountText} onChangeText={setAmountText} placeholder="$ 0.00" keyboardType="decimal-pad" />
-            <View style={{ flex: 1, minHeight: 130 }} />
-            <Button t={t} title="Continue" onPress={() => setStep('best')} />
-            <Button t={t} title="Skip for now" secondary onPress={() => { setAmountText(''); setStep('best'); }} />
+            <Header t={t} title="How much is your purchase?" subtitle="This verified rule can change the winner based on the transaction amount." />
+            <Field t={t} value={amountText} onChangeText={handleAmountTextChange} placeholder="$ 0.00" keyboardType="decimal-pad" />
+            <Button t={t} title="Continue" disabled={!amount} onPress={() => setStep('best')} />
+            <Button t={t} title="Skip Amount" secondary onPress={() => setStep('best')} />
           </>}
 
-          {step === 'best' && best && <>
+          {step === 'best' && <>
             <Header t={t} title="Your Best Card" subtitle={`${merchant?.name} • ${category}`} />
-            <DemoBanner t={t} />
-            <CardVisual t={t} card={best.card} />
-            <Glass t={t}>
-              <Text style={{ color: CYAN, fontWeight: '900', fontSize: 24 }}>{best.kind === 'cashback' ? `${best.rate.toFixed(1)}% cashback` : `${best.rate.toFixed(1)}× points`}</Text>
-              {best.reward != null && <Text style={{ color: t.text, fontWeight: '800', marginTop: 7 }}>Estimated reward value: {money(best.reward)}</Text>}
-              {best.benefits.map((b) => <Text key={b} style={{ color: t.secondary, marginTop: 6 }}>✓ {b}</Text>)}
-            </Glass>
-            <Button t={t} title="Why this card?" secondary onPress={() => setWhy(true)} />
-            <Button t={t} title="I Used This Card" onPress={() => { setUsedCard(best.card); setStep('log'); }} />
-            <Button t={t} title="Choose Another Card" secondary onPress={() => setStep('override')} />
+            {!best || !bestCard ? <Glass t={t}><Text style={{ color: RED, fontWeight: '800' }}>SwipeWise does not have enough verified data to make a recommendation for this context.</Text></Glass> : <>
+              <CardVisual t={t} card={bestCard} />
+              <Glass t={t}>
+                <Text style={{ color: CYAN, fontWeight: '900', fontSize: 24 }}>{rewardLabel(best)}</Text>
+                {best.estimatedRewardValue != null && <Text style={{ color: t.text, fontWeight: '800', marginTop: 7 }}>Estimated reward value: {money(best.estimatedRewardValue)}</Text>}
+                {best.estimatedRewardUnits != null && best.rewardKind === 'points' && <Text style={{ color: t.secondary, marginTop: 5 }}>Estimated points: {best.estimatedRewardUnits.toFixed(0)} {friendlyRewardCurrency(best.rewardCurrency)}</Text>}
+                {best.benefitHighlights.map((benefit) => <Text key={benefit.id} style={{ color: t.secondary, marginTop: 6 }}>✓ {benefit.details || benefit.benefit_type}{benefit.conditionsApply ? ' — conditions apply' : ''}</Text>)}
+                <Text style={{ color: t.secondary, marginTop: 8 }}>Data confidence: {result.data_confidence}</Text>
+              </Glass>
+              {!!result.warning_codes.length && <Glass t={t}>{result.warning_codes.slice(0, 5).map((code) => <Text key={code} style={{ color: '#e8aa2e', marginVertical: 3 }}>⚠ {warningText(code)}</Text>)}</Glass>}
+              <Button t={t} title="Why This Card?" secondary onPress={() => setWhy(true)} />
+              <Button t={t} title="I Used This Card" onPress={() => { setUsedCard(bestCard); setStep('log'); }} />
+              <Button t={t} title="Choose Another" secondary onPress={() => setStep('override')} />
+            </>}
           </>}
 
           {step === 'override' && <>
-            <Header t={t} title="Choose Another Card" subtitle="You're always in control." />
-            {ranked.map((r) => <RowButton key={r.card.id} t={t} title={`${r.card.bank} ${r.card.name}`} subtitle={`Estimated value ${r.percent.toFixed(2)}%`} onPress={() => { setUsedCard(r.card); setStep('log'); }} />)}
+            <Header t={t} title="Choose Another Card" subtitle="You are always in control." />
+            {ranked.map((candidate) => {
+              const card = wallet.find((item) => item.id === candidate.cardSlug);
+              return card ? <RowButton key={candidate.cardSlug} t={t} title={card.name} subtitle={rewardLabel(candidate)} onPress={() => { setUsedCard(card); setStep('log'); }} /> : null;
+            })}
+            <Button t={t} title="Back" secondary onPress={() => setStep('best')} />
           </>}
 
           {step === 'log' && <>
-            <Header t={t} title="Log Your Purchase" subtitle="Optional details help SwipeWise learn your spending patterns." />
-            {!amountText && <Field t={t} value={amountText} onChangeText={setAmountText} placeholder="Amount (optional)" keyboardType="decimal-pad" />}
-            <Field t={t} value={notes} onChangeText={setNotes} placeholder="Notes (optional)" multiline />
-            {usedCard && <Glass t={t}><Text style={{ color: t.secondary }}>Card used</Text><Text style={{ color: t.text, fontWeight: '800', marginTop: 4 }}>{usedCard.bank} {usedCard.name}</Text></Glass>}
-            {saveError ? <Text style={{ color: RED, fontWeight: '700' }}>{saveError}</Text> : null}
-            <View style={{ flex: 1, minHeight: 100 }} />
-            <Button t={t} title={saving ? "Saving…" : "Save Purchase"} disabled={saving} onPress={save} />
+            <Header t={t} title="Log Purchase" subtitle={`${merchant?.name} • ${usedCard?.name || ''}`} />
+            <Field t={t} value={amountText} onChangeText={handleAmountTextChange} placeholder="Amount (optional)" keyboardType="decimal-pad" />
+            <Field t={t} value={notes} onChangeText={setNotes} placeholder="Notes (optional)" />
+            {saveError ? <Text style={{ color: RED }}>{saveError}</Text> : null}
+            <Button t={t} title={saving ? 'Saving…' : 'Save Purchase'} disabled={saving} onPress={save} />
             <Button t={t} title="Skip" secondary onPress={onClose} />
           </>}
 
           {step === 'saved' && <>
-            <View style={{ flex: 1, minHeight: 120 }} />
-            <Text style={styles.complete}>✓</Text>
-            <Text style={[styles.bigCenter, { color: t.text }]}>Purchase Saved! 🎉</Text>
-            <Text style={[styles.tagline, { color: t.secondary }]}>We'll use this to improve your spending insights.</Text>
-            <View style={{ flex: 1, minHeight: 100 }} />
+            <View style={{ alignItems: 'center', marginTop: 80, gap: 16 }}><Text style={{ color: GREEN, fontSize: 70 }}>✓</Text><Header t={t} title="Purchase Saved" subtitle={amount ? 'Your logged purchase is stored in Supabase.' : 'Purchase logged without inventing a reward dollar value.'} /></View>
             <Button t={t} title="Done" onPress={onClose} />
           </>}
         </ScrollView>
 
-        <Modal visible={why} animationType="fade" transparent onRequestClose={() => setWhy(false)}>
-          <View style={styles.overlay}><View style={[styles.sheet, { backgroundColor: t.bg2 }]}>
-            <ScrollView contentContainerStyle={{ gap: 12 }}>
-              <Header t={t} title="Why This Card?" subtitle="SwipeWise compared all cards in your wallet." />
-              {best && <CardVisual t={t} card={best.card} compact />}
+        <Modal visible={why} animationType="slide" onRequestClose={() => setWhy(false)}>
+          <AppShell theme={theme}>
+            <ScrollView contentContainerStyle={styles.page}>
+              <Header t={t} title="Why This Card?" subtitle="Deterministic result from verified Supabase rules." />
+              {best && bestCard && <CardVisual t={t} card={bestCard} compact />}
               {best && <Glass t={t}>
-                <Text style={{ color: t.text, fontWeight: '900' }}>{best.kind === 'cashback' ? `${best.rate}% cashback` : `${best.rate}× points`}</Text>
-                <Text style={{ color: CYAN, marginTop: 6 }}>Estimated reward-equivalent: {best.percent.toFixed(2)}%</Text>
-                {best.benefits.map((b) => <Text key={b} style={{ color: t.secondary, marginTop: 5 }}>✓ {b}</Text>)}
+                <Text style={{ color: t.text, fontWeight: '900' }}>{rewardLabel(best)}</Text>
+                {best.estimatedEquivalentPercent != null ? <Text style={{ color: CYAN, marginTop: 6 }}>SwipeWise estimated equivalent: {best.estimatedEquivalentPercent.toFixed(2)}%</Text> : <Text style={{ color: '#e8aa2e', marginTop: 6 }}>No cash-equivalent point value is being assumed.</Text>}
+                <Text style={{ color: t.secondary, marginTop: 7 }}>Rule: {best.primaryRule?.category || 'Base'}{best.primaryRule?.merchant_pattern ? ` • ${best.primaryRule.merchant_pattern}` : ''}</Text>
+                <Text style={{ color: t.secondary, marginTop: 5 }}>Last verified: {verifiedDate(best.verifiedAt)}</Text>
+                {best.reasonCodes.map((code) => <Text key={code} style={{ color: t.secondary, marginTop: 5 }}>• {code.replaceAll('_', ' ').toLowerCase()}</Text>)}
               </Glass>}
-              <Text style={[styles.sectionTitle, { color: t.text }]}>Other cards</Text>
-              {ranked.slice(1).map((r) => <RowButton key={r.card.id} t={t} title={r.card.name} subtitle={`${r.percent.toFixed(2)}%`} onPress={() => {}} />)}
-              <Button t={t} title="Got It" onPress={() => setWhy(false)} />
+              <Text style={[styles.sectionTitle, { color: t.text }]}>Ranked Alternatives</Text>
+              {ranked.map((candidate, index) => <Glass key={candidate.cardSlug} t={t}><DetailRow t={t} a={`#${index + 1} ${candidate.cardName}`} b={rewardLabel(candidate)} />{candidate.warningCodes.slice(0, 2).map((code) => <Text key={code} style={{ color: '#e8aa2e', fontSize: 11, marginTop: 4 }}>⚠ {warningText(code)}</Text>)}</Glass>)}
+              <Button t={t} title="Back" onPress={() => setWhy(false)} />
             </ScrollView>
-          </View></View>
+          </AppShell>
         </Modal>
       </AppShell>
     </Modal>
@@ -649,7 +688,7 @@ function Home({ t, userName, purchases, onQuick, onHistory }) {
   </ScrollView>;
 }
 
-function Wallet({ t, wallet, selectedIds, onAddCard, onRemoveCard }) {
+function Wallet({ t, wallet, catalog, selectedIds, onAddCard, onRemoveCard }) {
   const [detail, setDetail] = useState(null);
   const [adding, setAdding] = useState(false);
   const [busyCardId, setBusyCardId] = useState(null);
@@ -681,15 +720,14 @@ function Wallet({ t, wallet, selectedIds, onAddCard, onRemoveCard }) {
 
   return <ScrollView contentContainerStyle={styles.tabPage}>
     <Header t={t} title="My Cards" subtitle={`${wallet.length} cards in your wallet`} />
-    {!wallet.length ? <Glass t={t}><Text style={{ color: t.secondary }}>No cards in your wallet yet. Add at least one card before using Quick Swipe.</Text></Glass> : null}
+    {!wallet.length ? <Glass t={t}><Text style={{ color: t.secondary }}>No cards in your wallet yet. Add at least one verified card product before using Quick Swipe.</Text></Glass> : null}
     {wallet.map((c) => <Pressable key={c.id} onPress={() => setDetail(c)}><CardVisual t={t} card={c} compact /></Pressable>)}
     <Button t={t} title="Add Card" onPress={() => setAdding(true)} />
-    <DemoBanner t={t} />
     <Modal visible={adding} animationType="slide" onRequestClose={() => setAdding(false)}>
       <View style={{ flex: 1, backgroundColor: t.bg }}>
         <ScrollView contentContainerStyle={styles.page}>
-          <Header t={t} title="Add Card" subtitle="These are demo product identities until the verified Canadian card database is connected." />
-          {cards.map((c) => <RowButton key={c.id} t={t} title={`${c.bank} ${c.name}`} subtitle={busyCardId === c.id ? 'Saving…' : 'Demo product reference'} selected={selectedIds.includes(c.id)} onPress={() => add(c.id)} />)}
+          <Header t={t} title="Add Card" subtitle="Select the exact active verified Supabase product you own." />
+          {catalog.map((c) => <RowButton key={c.id} t={t} title={c.name} subtitle={busyCardId === c.id ? 'Saving…' : `${c.network} • verified ${verifiedDate(c.verifiedAt)}`} selected={selectedIds.includes(c.id)} onPress={() => add(c.id)} />)}
           <Button t={t} title="Done" onPress={() => setAdding(false)} />
         </ScrollView>
       </View>
@@ -701,18 +739,38 @@ function Wallet({ t, wallet, selectedIds, onAddCard, onRemoveCard }) {
 }
 
 function CardDetails({ t, card, onClose, onRemove }) {
-  return <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}><ScrollView contentContainerStyle={styles.page}><Header t={t} title={card.name} subtitle={card.bank} /><CardVisual t={t} card={card} /><DemoBanner t={t} /><Glass t={t}><DetailRow t={t} a="Network" b={card.network} /><DetailRow t={t} a="Annual Fee" b={money(card.fee)} /><DetailRow t={t} a="Card ending" b={`•••• ${card.last4}`} /></Glass><Glass t={t}><Text style={[styles.sectionTitle, { color: t.text }]}>Demo Rewards</Text>{Object.entries(card.rules).map(([cat, r]) => <DetailRow key={cat} t={t} a={cat} b={r[0] === 'cashback' ? `${r[1]}%` : `${r[1]}×`} />)}</Glass><Glass t={t}><Text style={[styles.sectionTitle, { color: t.text }]}>Benefits</Text>{card.benefits.map((b) => <Text key={b} style={{ color: t.secondary, marginVertical: 3 }}>✓ {b}</Text>)}</Glass><Button t={t} title="Remove Card" secondary onPress={onRemove} /><Button t={t} title="Back" onPress={onClose} /></ScrollView></SafeAreaView>;
+  const sortedRules = [...(card.rewardRules || [])].sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.merchant_pattern || '').localeCompare(b.merchant_pattern || ''));
+  return <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}><ScrollView contentContainerStyle={styles.page}>
+    <Header t={t} title={card.name} subtitle={card.bank} />
+    <CardVisual t={t} card={card} />
+    <Glass t={t}>
+      <DetailRow t={t} a="Network" b={card.network} />
+      <DetailRow t={t} a="Annual Fee" b={card.annualFee == null ? 'Not available' : money(card.annualFee)} />
+      <DetailRow t={t} a="Verification" b={card.verificationStatus} />
+      <DetailRow t={t} a="Last verified" b={verifiedDate(card.verifiedAt)} />
+    </Glass>
+    <Glass t={t}>
+      <Text style={[styles.sectionTitle, { color: t.text }]}>Verified Reward Rules</Text>
+      {sortedRules.length ? sortedRules.map((rule) => <View key={rule.id} style={{ marginVertical: 5 }}><DetailRow t={t} a={`${rule.category}${rule.merchant_pattern ? ` • ${rule.merchant_pattern}` : ''}`} b={rule.reward_kind === 'cashback' ? `${rule.rate}%` : `${rule.rate}× ${friendlyRewardCurrency(rule.reward_currency)}`} />{rule.spend_cap != null ? <Text style={{ color: t.secondary, fontSize: 11 }}>Cap: {money(rule.spend_cap)}{rule.post_cap_rate != null ? ` • then ${rule.post_cap_rate}${rule.reward_kind === 'cashback' ? '%' : '×'}` : ''}</Text> : null}</View>) : <Text style={{ color: t.secondary }}>No verified reward rules are readable.</Text>}
+    </Glass>
+    <Glass t={t}>
+      <Text style={[styles.sectionTitle, { color: t.text }]}>Verified Benefits</Text>
+      {(card.benefits || []).length ? card.benefits.map((benefit) => <View key={benefit.id} style={{ marginVertical: 5 }}><Text style={{ color: t.text, fontWeight: '800' }}>{benefit.details || benefit.benefit_type}</Text>{benefit.coverage_limit ? <Text style={{ color: t.secondary, marginTop: 2 }}>{benefit.coverage_limit}</Text> : null}</View>) : <Text style={{ color: t.secondary }}>No verified benefits are readable.</Text>}
+    </Glass>
+    <Text style={{ color: t.secondary, fontSize: 11 }}>Issuer/source terms govern. Coverage limits are metadata, not recommendation dollars.</Text>
+    <Button t={t} title="Remove Card" secondary onPress={onRemove} /><Button t={t} title="Back" onPress={onClose} />
+  </ScrollView></SafeAreaView>;
 }
 
 function DetailRow({ t, a, b }) { return <View style={styles.detailRow}><Text style={{ color: t.secondary }}>{a}</Text><Text style={{ color: t.text, fontWeight: '800', textAlign: 'right', flex: 1 }}>{b}</Text></View>; }
 
-function Insights({ t, purchases, wallet }) {
+function Insights({ t, purchases, wallet, catalog }) {
   const [sub, setSub] = useState('Overview');
   const totalSpend = purchases.reduce((s, p) => s + (p.amount || 0), 0);
   const totalRewards = purchases.reduce((s, p) => s + (p.reward || 0), 0);
   const byCat = categories.map((c) => ({ c, v: purchases.filter((p) => p.category === c).reduce((s, p) => s + (p.amount || 0), 0) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
   const topCat = byCat[0]?.c || 'Groceries';
-  const candidate = cards.find((c) => !wallet.some((w) => w.id === c.id)) || cards[cards.length - 1];
+  const candidate = catalog.find((c) => !wallet.some((w) => w.id === c.id)) || catalog[catalog.length - 1];
   return <ScrollView contentContainerStyle={styles.tabPage}>
     <Header t={t} title="Insights" subtitle="Your SwipeWise overview" />
     <View style={styles.segment}>{['Overview', 'Spending', 'Rewards', 'Impact', 'Recommend'].map((x) => <Pressable key={x} onPress={() => setSub(x)} style={[styles.segmentItem, sub === x && { backgroundColor: BLUE }]}><Text style={{ color: sub === x ? 'white' : t.secondary, fontSize: 11, fontWeight: '800' }}>{x}</Text></Pressable>)}</View>
@@ -720,14 +778,14 @@ function Insights({ t, purchases, wallet }) {
     {sub === 'Spending' && <><Header t={t} title="Spending Trends" subtitle="Based only on purchases you choose to log." />{byCat.length ? byCat.map((x) => <Glass key={x.c} t={t}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: t.text, fontWeight: '800' }}>{x.c}</Text><Text style={{ color: CYAN }}>{money(x.v)}</Text></View><View style={[styles.barBg, { backgroundColor: t.input }]}><View style={[styles.barFill, { width: `${Math.max(8, Math.min(100, (x.v / (byCat[0]?.v || 1)) * 100))}%` }]} /></View></Glass>) : <Glass t={t}><Text style={{ color: t.secondary }}>No spending data yet.</Text></Glass>}</>}
     {sub === 'Rewards' && <><Text style={[styles.rewardBig, { color: GREEN }]}>{money(totalRewards)}</Text>{wallet.map((c) => <Glass key={c.id} t={t}><DetailRow t={t} a={c.name} b={money(purchases.filter((p) => p.usedCardId === c.id).reduce((s, p) => s + (p.reward || 0), 0))} /></Glass>)}<DemoBanner t={t} /></>}
     {sub === 'Impact' && <><Glass t={t}><Text style={{ color: t.secondary, textAlign: 'center' }}>You've earned</Text><Text style={[styles.rewardBig, { color: t.text }]}>{money(totalRewards)}</Text><Text style={{ color: t.secondary, textAlign: 'center' }}>in estimated rewards from logged purchases</Text></Glass><View style={{ flexDirection: 'row', gap: 10 }}><Stat t={t} title="Optimized Purchases" value={`${purchases.filter((p) => p.followed).length}`} /><Stat t={t} title="Logged Purchases" value={`${purchases.length}`} /></View></>}
-    {sub === 'Recommend' && <><DemoBanner t={t} /><Glass t={t}><Text style={[styles.sectionTitle, { color: t.text }]}>Potential fit for {topCat}</Text><Text style={{ color: CYAN, fontWeight: '900' }}>{candidate.bank} {candidate.name}</Text><Text style={{ color: t.secondary, marginTop: 8 }}>Future production logic can compare your verified spending with cards you do not own, fees, rewards and benefits.</Text></Glass><CardVisual t={t} card={candidate} compact /></>}
+    {sub === 'Recommend' && <><Glass t={t}><Text style={[styles.sectionTitle, { color: t.text }]}>Future recommendation area</Text><Text style={{ color: t.secondary }}>New-card recommendations are intentionally separate from checkout ranking and are not implemented in this Chat 06 milestone.</Text></Glass>{candidate ? <CardVisual t={t} card={candidate} compact /> : null}</>}
   </ScrollView>;
 }
 
-function HistoryModal({ theme, purchases, wallet, onClose }) {
+function HistoryModal({ theme, purchases, wallet, catalog, onClose }) {
   const t = makeTheme(theme);
   const [selected, setSelected] = useState(null);
-  const getCard = (id) => cards.find((c) => c.id === id)?.name || 'Card';
+  const getCard = (id) => catalog.find((c) => c.id === id)?.name || 'Card';
   return <Modal visible animationType="slide" onRequestClose={onClose}><AppShell theme={theme}><ScrollView contentContainerStyle={styles.page}><Header t={t} title={selected ? 'Purchase Detail' : 'History'} />{!selected ? purchases.map((p) => <RowButton key={p.id} t={t} title={p.merchant} subtitle={`${new Date(p.date).toLocaleDateString()} • ${p.category}`} icon={p.amount ? money(p.amount) : '›'} onPress={() => setSelected(p)} />) : <><Header t={t} title={selected.merchant} subtitle={`${new Date(selected.date).toLocaleString()} • ${selected.mode}`} /><Glass t={t}><DetailRow t={t} a="Amount" b={selected.amount ? money(selected.amount) : 'Not entered'} /><DetailRow t={t} a="Category" b={selected.category} /><DetailRow t={t} a="Recommended" b={getCard(selected.recommendedCardId)} /><DetailRow t={t} a="Card used" b={getCard(selected.usedCardId)} /><DetailRow t={t} a="Est. reward" b={selected.reward == null ? 'Not estimated' : money(selected.reward)} /><DetailRow t={t} a="Followed recommendation" b={selected.followed ? 'Yes' : 'No'} /></Glass>{selected.notes ? <Glass t={t}><Text style={{ color: t.text }}>{selected.notes}</Text></Glass> : null}<Button t={t} title="Back to History" secondary onPress={() => setSelected(null)} /></>}<Button t={t} title="Done" onPress={onClose} /></ScrollView></AppShell></Modal>;
 }
 
@@ -772,9 +830,9 @@ function Settings({
       <Button t={t} title="Clear Purchase History" secondary onPress={onClear} />
     </>}
     {page === 'Help & Support' && <>{['FAQ', 'Contact Us', 'Report an Issue', 'Video Tutorials'].map((x) => <RowButton key={x} t={t} title={x} onPress={() => {}} />)}<Text style={{ color: t.secondary }}>Support actions remain placeholders in this milestone.</Text></>}
-    {page === 'About SwipeWise' && <><View style={{ minHeight: 70 }} /><Logo t={t} /><Text style={[styles.tagline, { color: t.secondary }]}>Version 0.2.0\nExpo React Native + Supabase backend</Text></>}
+    {page === 'About SwipeWise' && <><View style={{ minHeight: 70 }} /><Logo t={t} /><Text style={[styles.tagline, { color: t.secondary }]}>Version 0.3.0\nExpo React Native + Supabase + verified recommendation engine</Text></>}
     {page === 'Action Button' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Quick Swipe shortcut</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Native iPhone Action Button/App Intents require a native iOS build. This backend milestone leaves that feature unchanged.</Text></Glass></>}
-    {page === 'Data & Sync' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Supabase connected</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Authentication sessions, wallet selections, settings and purchase history use your Supabase development project. The recommendation rates remain clearly labelled demo data.</Text></Glass></>}
+    {page === 'Data & Sync' && <><Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Supabase connected</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Authentication sessions, wallet selections, settings and purchase history use your Supabase development project. Checkout recommendations now consume active verified Supabase card products, reward rules and benefits. Point cash-equivalent values remain separate estimates and are not invented.</Text></Glass></>}
   </ScrollView>;
 
   return <ScrollView contentContainerStyle={styles.tabPage}><Header t={t} title="Settings" />
@@ -803,12 +861,14 @@ function MainApp({
   onSavePurchase,
   onClearPurchases,
   onSignOut,
+  catalog,
+  referenceMeta,
 }) {
   const t = makeTheme(theme);
   const [tab, setTab] = useState('Home');
   const [quick, setQuick] = useState(false);
   const [history, setHistory] = useState(false);
-  const wallet = cards.filter((c) => selectedIds.includes(c.id));
+  const wallet = catalog.filter((c) => selectedIds.includes(c.id));
 
   const openQuickSwipe = () => {
     if (!wallet.length) {
@@ -822,13 +882,13 @@ function MainApp({
   return <AppShell theme={theme}>
     <View style={{ flex: 1 }}>
       {tab === 'Home' && <Home t={t} userName={userName} purchases={purchases} onQuick={openQuickSwipe} onHistory={() => setHistory(true)} />}
-      {tab === 'Wallet' && <Wallet t={t} wallet={wallet} selectedIds={selectedIds} onAddCard={onAddCard} onRemoveCard={onRemoveCard} />}
-      {tab === 'Insights' && <Insights t={t} purchases={purchases} wallet={wallet} />}
+      {tab === 'Wallet' && <Wallet t={t} wallet={wallet} catalog={catalog} selectedIds={selectedIds} onAddCard={onAddCard} onRemoveCard={onRemoveCard} />}
+      {tab === 'Insights' && <Insights t={t} purchases={purchases} wallet={wallet} catalog={catalog} />}
       {tab === 'Settings' && <Settings t={t} appearance={appearance} onAppearanceChange={onAppearanceChange} userName={userName} rewardPreference={rewardPreference} onRewardPreferenceChange={onRewardPreferenceChange} onClear={onClearPurchases} onSignOut={onSignOut} />}
       <TabBar t={t} tab={tab} setTab={setTab} />
     </View>
-    {quick && <QuickSwipe theme={theme} wallet={wallet} rewardPreference={rewardPreference} onClose={() => setQuick(false)} onSave={onSavePurchase} />}
-    {history && <HistoryModal theme={theme} purchases={purchases} wallet={wallet} onClose={() => setHistory(false)} />}
+    {quick && <QuickSwipe theme={theme} wallet={wallet} rewardPreference={rewardPreference} purchases={purchases} referenceMeta={referenceMeta} onClose={() => setQuick(false)} onSave={onSavePurchase} />}
+    {history && <HistoryModal theme={theme} purchases={purchases} wallet={wallet} catalog={catalog} onClose={() => setHistory(false)} />}
   </AppShell>;
 }
 
@@ -836,6 +896,8 @@ export default function App() {
   const systemColorScheme = useColorScheme();
   const [splash, setSplash] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
+  const [referenceLoading, setReferenceLoading] = useState(true);
+  const [referenceData, setReferenceData] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [backendError, setBackendError] = useState('');
   const [session, setSession] = useState(null);
@@ -849,6 +911,19 @@ export default function App() {
   const theme = appearance === 'system'
     ? (systemColorScheme === 'light' ? 'light' : 'dark')
     : appearance;
+
+  useEffect(() => {
+    if (!supabase) {
+      setReferenceLoading(false);
+      return;
+    }
+    let mounted = true;
+    getVerifiedReferenceData()
+      .then((data) => { if (mounted) setReferenceData(data); })
+      .catch((error) => { if (mounted) setBackendError(error.message || 'Could not load verified card reference data.'); })
+      .finally(() => { if (mounted) setReferenceLoading(false); });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -890,7 +965,7 @@ export default function App() {
 
       setProfile(nextProfile);
       setUserName(nextProfile.display_name || 'SwipeWise User');
-      setSelectedIds(walletSlugs.filter((slug) => cards.some((card) => card.id === slug)));
+      setSelectedIds(walletSlugs);
       setRewardPreference(rewardPreferenceFromDb(settings.reward_preference));
       setAppearance(settings.appearance || 'system');
       setPurchases(history);
@@ -993,7 +1068,7 @@ export default function App() {
 
   if (!isSupabaseConfigured) return <BackendSetupRequired theme={theme} />;
   if (splash) return <Splash theme={theme} onDone={() => setSplash(false)} />;
-  if (authLoading || dataLoading) return <LoadingScreen theme={theme} />;
+  if (authLoading || dataLoading || referenceLoading) return <LoadingScreen theme={theme} message="Loading verified SwipeWise data…" />;
   if (backendError) return <BackendProblem theme={theme} message={backendError} onRetry={() => session?.user?.id ? hydrateUser(session.user.id) : setBackendError('')} onSignOut={session ? handleSignOut : null} />;
   // A signed-in user should never render onboarding until their profile/settings have hydrated.
   if (session && !profile) return <LoadingScreen theme={theme} />;
@@ -1011,6 +1086,7 @@ export default function App() {
       setSelectedIds={setSelectedIds}
       rewardPreference={rewardPreference}
       setRewardPreference={setRewardPreference}
+      catalog={referenceData?.cards || []}
     />;
   }
 
@@ -1028,6 +1104,8 @@ export default function App() {
     onSavePurchase={handleSavePurchase}
     onClearPurchases={handleClearPurchases}
     onSignOut={handleSignOut}
+    catalog={referenceData?.cards || []}
+    referenceMeta={referenceData || {}}
   />;
 }
 
