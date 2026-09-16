@@ -57,3 +57,19 @@ SWIPEWISE_TEST_REPORT_PATH=tests/recommendationEngine.results.json npm run test:
 ```
 
 See `docs/RECOMMENDATION_ENGINE_V1.md`, `docs/CHAT08_SECURITY_HANDOFF.md`, and `docs/CHAT10_QA_HANDOFF.md`.
+
+---
+
+## Chat 07 — Merchant & Location Integration v1
+
+This build adds a production-capable merchant-context layer while preserving explicit **In Store / Online** intent selection.
+
+- Foreground-only `expo-location`; requested only when the user taps **Find Nearby Stores**.
+- TomTom Search API v2 is called only through authenticated Supabase Edge Function `merchant-search`.
+- Manual merchant search/entry remains available when location/provider is unavailable.
+- Provider POI category is never treated as guaranteed payment-network MCC.
+- Network acceptance is passed to the engine only when evidence is verified.
+- Online merchant search and manual merchant-name preservation address SW-BUG-017 and SW-BUG-018.
+- Raw user coordinates are not stored in purchase history.
+
+See `docs/MERCHANT_LOCATION_V1.md` and the Chat 10/08 handoff docs before live deployment.

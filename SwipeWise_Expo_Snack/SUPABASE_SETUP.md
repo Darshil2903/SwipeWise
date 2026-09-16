@@ -81,3 +81,18 @@ Create User A and User B and verify each authenticated app session can see only 
 ## 7. Development email confirmation
 
 If the existing development project currently has email confirmation disabled for testing, keep that as the previously approved development-only setup. Re-enable/implement the production email verification flow before launch.
+
+---
+
+## Chat 07: merchant-search Edge Function
+
+The TomTom provider key is server-only. Do not add it to Expo `.env` files.
+
+```bash
+supabase secrets set TOMTOM_API_KEY=YOUR_TOMTOM_KEY
+supabase functions deploy merchant-search
+```
+
+`supabase/config.toml` enables JWT verification for this function. The Expo app should contain only the client-safe Supabase URL and publishable key shown in `.env.example`.
+
+No Chat 07 database migration is required.

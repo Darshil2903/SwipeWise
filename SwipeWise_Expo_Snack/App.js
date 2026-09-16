@@ -30,37 +30,17 @@ import { clearPurchases, createPurchase, getPurchases } from './services/purchas
 import { getVerifiedReferenceData } from './services/cardReferenceService';
 import { recommendCards, WARNING_CODES } from './engine/recommendationEngine';
 import { productionPointValuations } from './engine/pointValuations';
+import { GENERIC_PURCHASE_CATEGORIES } from './config/merchantCatalog';
+import { createManualMerchant, nearbyConfidenceLabel, searchCatalogMerchants, toRecommendationMerchantContext } from './services/merchantNormalization';
+import { getNearbyMerchants, searchInStoreMerchants, searchOnlineMerchants } from './services/merchantProviderService';
+import { requestForegroundCoordinates } from './services/locationService';
 
 const BLUE = '#0798ff';
 const CYAN = '#35d8ff';
 const GREEN = '#2ee6a6';
 const RED = '#ff6b7a';
 
-const categories = [
-  'Groceries', 'Gas', 'Electric Vehicle Charging', 'Dining / Restaurants', 'Shopping', 'Electronics', 'Travel',
-  'Flight Ticket', 'Hotel', 'Rental Car', 'Pharmacy', 'Drug Stores', 'Beauty', 'Clothing',
-  'Home', 'Subscriptions', 'Streaming', 'Food / Grocery Delivery', 'Transit / Ride Share',
-  'Transportation', 'Entertainment', 'Warehouse Purchase', 'Costco Gas', 'Other',
-];
-
-// Merchant discovery is still a later Chat 07 milestone. These entries are UI-only
-// test merchants; they contain no reward percentages, point values, fees or benefits.
-const nearbyMerchants = [
-  ['Costco', '0.4 km', ['Warehouse Purchase', 'Costco Gas', 'Pharmacy', 'Optical', 'Food Court', 'Other']],
-  ['Walmart Supercentre', '0.7 km', ['Groceries', 'Electronics', 'Home', 'Clothing', 'Other']],
-  ['Best Buy', '1.2 km', ['Electronics', 'Shopping', 'Other']],
-  ['Shoppers Drug Mart', '1.6 km', ['Pharmacy', 'Beauty', 'Groceries', 'Electronics', 'Other']],
-  ['Shell', '2.1 km', ['Gas', 'Shopping', 'Other']],
-].map((m, i) => ({ id: `near-${i}`, name: m[0], subtitle: m[1], categories: m[2] }));
-
-const onlineMerchants = [
-  ['Amazon.ca', ['Electronics', 'Home', 'Clothing', 'Groceries', 'Shopping', 'Other']],
-  ['Walmart.ca', ['Groceries', 'Electronics', 'Home', 'Clothing', 'Other']],
-  ['BestBuy.ca', ['Electronics', 'Shopping', 'Other']],
-  ['Apple', ['Electronics', 'Shopping', 'Other']],
-  ['Air Canada', ['Flight Ticket', 'Travel', 'Other']],
-  ['WestJet', ['Flight Ticket', 'Travel', 'Other']],
-].map((m, i) => ({ id: `online-${i}`, name: m[0], subtitle: 'Online', categories: m[1] }));
+const categories = GENERIC_PURCHASE_CATEGORIES;
 
 const money = (n) => `$${Number(n || 0).toFixed(2)}`;
 
@@ -205,7 +185,7 @@ function CardVisual({ t, card, compact = false }) {
 function DemoBanner({ t }) {
   return (
     <View style={[styles.demo, { borderColor: '#d99c21' }]}>
-      <Text style={{ color: '#e8aa2e', fontSize: 11 }}>⚠ Nearby merchant discovery is still demo-only. Financial reward rules come from verified Supabase reference data.</Text>
+      <Text style={{ color: '#e8aa2e', fontSize: 11 }}>⚠ Merchant discovery uses foreground-only location and a server-side provider proxy when configured. No private provider key is stored in Expo.</Text>
     </View>
   );
 }
@@ -512,33 +492,38 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
   const [why, setWhy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [merchantQuery, setMerchantQuery] = useState('');
+  const [merchantResults, setMerchantResults] = useState([]);
+  const [manualMerchantName, setManualMerchantName] = useState('');
+  const [merchantBusy, setMerchantBusy] = useState(false);
+  const [merchantError, setMerchantError] = useState('');
+  const [foregroundCoords, setForegroundCoords] = useState(null);
+  const [locationState, setLocationState] = useState('not_requested');
   const amount = parseAmountText(amountText);
+
   const handleAmountTextChange = (value) => {
     const normalized = normalizeAmountText(value);
     if (normalized != null) setAmountText(normalized);
   };
 
-  const buildResult = (nextCategory = category, nextAmount = amount) => recommendCards({
-    cards: wallet,
-    context: {
-      merchantName: merchant?.name || '',
-      purchaseMode: mode,
-      purchaseCategory: nextCategory,
-      // Chat 07 will later provide verified MCC/network/category and acceptance data.
-      // Do not treat the user's item category as an issuer merchant classification.
-      rewardCategory: merchant?.rewardCategory || null,
-      acceptedNetworks: merchant?.acceptedNetworks || null,
-      merchantClassifications: merchant?.merchantClassifications || [],
-      merchantAttributes: merchant?.merchantAttributes || {},
-      amount: nextAmount,
-      purchaseDate: new Date().toISOString(),
-      country: 'CA',
-    },
-    rewardPreference,
-    pointValuations: productionPointValuations,
-    purchases,
-    referenceMeta,
-  });
+  const buildResult = (nextCategory = category, nextAmount = amount) => {
+    const merchantContext = toRecommendationMerchantContext(merchant);
+    return recommendCards({
+      cards: wallet,
+      context: {
+        ...merchantContext,
+        purchaseMode: mode,
+        purchaseCategory: nextCategory,
+        amount: nextAmount,
+        purchaseDate: new Date().toISOString(),
+        country: 'CA',
+      },
+      rewardPreference,
+      pointValuations: productionPointValuations,
+      purchases,
+      referenceMeta,
+    });
+  };
 
   const result = useMemo(
     () => buildResult(category, amount),
@@ -548,11 +533,107 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
   const best = ranked[0] || null;
   const bestCard = best ? wallet.find((card) => card.id === best.cardSlug) : null;
 
-  const pickMerchant = (m) => { setMerchant(m); setStep('category'); };
-  const pickCategory = (c) => {
-    setCategory(c);
-    const preview = buildResult(c, null);
+  const pickMerchant = (nextMerchant) => {
+    setMerchant(nextMerchant);
+    setMerchantError('');
+    setCategory('Other');
+    setStep('category');
+  };
+
+  const pickCategory = (nextCategory) => {
+    setCategory(nextCategory);
+    const preview = buildResult(nextCategory, null);
     setStep(preview.amount_required ? 'amount' : 'best');
+  };
+
+  const openOnlineSearch = () => {
+    setMode('Online');
+    setMerchantQuery('');
+    setMerchantResults(searchOnlineMerchants('', { limit: 10 }));
+    setMerchantError('');
+    setStep('merchant_search');
+  };
+
+  const openInStore = () => {
+    setMode('In Store');
+    setMerchantError('');
+    setStep('in_store_start');
+  };
+
+  const openMerchantSearch = () => {
+    const normalizedMode = mode === 'Online' ? 'online' : 'in_store';
+    setMerchantQuery('');
+    setMerchantResults(searchCatalogMerchants('', { mode: normalizedMode, limit: 10 }));
+    setMerchantError('');
+    setStep('merchant_search');
+  };
+
+  const handleFindNearby = async () => {
+    if (merchantBusy) return;
+    setMerchantBusy(true);
+    setMerchantError('');
+    try {
+      setLocationState('requesting');
+      const location = await requestForegroundCoordinates();
+      if (location.status !== 'granted' || !location.coords) {
+        setLocationState(location.status || 'denied');
+        setMerchantError('Location is not available. You can still search for a merchant or enter one manually.');
+        return;
+      }
+      setLocationState('granted');
+      setForegroundCoords(location.coords);
+      const nearby = await getNearbyMerchants(location.coords);
+      if (!nearby.length) {
+        setMerchantError('No nearby merchants were returned. Search or enter the merchant manually.');
+        return;
+      }
+      setMerchantResults(nearby);
+      setStep('nearby');
+    } catch (error) {
+      setLocationState('error');
+      setMerchantError(error?.message || 'Nearby merchant discovery is unavailable. Search or enter the merchant manually.');
+    } finally {
+      setMerchantBusy(false);
+    }
+  };
+
+  const handleMerchantSearch = async () => {
+    const query = merchantQuery.trim();
+    if (!query) {
+      setMerchantResults(mode === 'Online'
+        ? searchOnlineMerchants('', { limit: 10 })
+        : searchCatalogMerchants('', { mode: 'in_store', limit: 10 }));
+      return;
+    }
+    setMerchantBusy(true);
+    setMerchantError('');
+    try {
+      const results = mode === 'Online'
+        ? searchOnlineMerchants(query, { limit: 12 })
+        : await searchInStoreMerchants(query, { coords: foregroundCoords, limit: 12 });
+      setMerchantResults(results);
+      if (!results.length) setMerchantError('No known match found. You can use the exact name you entered manually.');
+    } catch (error) {
+      setMerchantError(error?.message || 'Merchant search is unavailable. You can still enter the merchant manually.');
+      setMerchantResults([]);
+    } finally {
+      setMerchantBusy(false);
+    }
+  };
+
+  const openManualEntry = (prefill = '') => {
+    setManualMerchantName(prefill || merchantQuery || '');
+    setMerchantError('');
+    setStep('manual_merchant');
+  };
+
+  const useManualMerchant = () => {
+    const manual = createManualMerchant(manualMerchantName, { mode: mode || 'In Store' });
+    if (!manual) {
+      setMerchantError('Enter the merchant name before continuing.');
+      return;
+    }
+    pickMerchant(manual);
   };
 
   const save = async () => {
@@ -574,21 +655,74 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
     }
   };
 
+  const merchantEvidence = merchant ? [
+    `Merchant: ${merchant.name}`,
+    `Identity: ${merchant.normalizationStatus || 'UNKNOWN'}${merchant.enteredName && merchant.enteredName !== merchant.name ? ` (entered as “${merchant.enteredName}”)` : ''}`,
+    `MCC: ${merchant.mccEvidence?.status === 'VERIFIED' ? merchant.mccEvidence.value : 'Unknown — not assumed'}`,
+    `Card-network acceptance: ${merchant.acceptance?.status === 'VERIFIED' ? merchant.acceptance.networks.join(', ') : 'Unknown — engine will warn rather than guess'}`,
+  ] : [];
+
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <AppShell theme={theme}>
         <View style={styles.modalTop}><Pressable onPress={onClose}><Text style={{ color: CYAN, fontWeight: '800' }}>Cancel</Text></Pressable><Text style={{ color: t.text, fontWeight: '900' }}>Quick Swipe</Text><View style={{ width: 46 }} /></View>
         <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
           {step === 'mode' && <>
-            <Header t={t} title="Where are you making a purchase?" />
-            <BigChoice t={t} title="In Store" subtitle="Find nearby stores" onPress={() => { setMode('In Store'); setStep('merchant'); }} />
-            <BigChoice t={t} title="Online" subtitle="Choose an online merchant" onPress={() => { setMode('Online'); setStep('merchant'); }} />
+            <Header t={t} title="Where are you making a purchase?" subtitle="Location never decides this for you." />
+            <BigChoice t={t} title="In Store" subtitle="Find nearby stores or search manually" onPress={openInStore} />
+            <BigChoice t={t} title="Online" subtitle="Search an online merchant" onPress={openOnlineSearch} />
           </>}
 
-          {step === 'merchant' && <>
-            <Header t={t} title={mode === 'In Store' ? 'Nearby Stores' : 'Where are you shopping?'} subtitle={mode === 'In Store' ? 'Demo nearby merchants; financial rules are verified Supabase data' : 'Select an online merchant'} />
-            {(mode === 'In Store' ? nearbyMerchants : onlineMerchants).map((m) => <RowButton key={m.id} t={t} title={m.name} subtitle={m.subtitle} onPress={() => pickMerchant(m)} />)}
-            <RowButton t={t} title="Other (Enter Manually)" onPress={() => pickMerchant({ id: 'other', name: 'Other Merchant', subtitle: mode, categories })} />
+          {step === 'in_store_start' && <>
+            <Header t={t} title="Choose the Store" subtitle="Use foreground location only if you want nearby suggestions." />
+            {merchantError ? <Glass t={t}><Text style={{ color: '#e8aa2e' }}>{merchantError}</Text></Glass> : null}
+            <Button t={t} title={merchantBusy ? 'Finding Nearby Stores…' : 'Find Nearby Stores'} disabled={merchantBusy} onPress={handleFindNearby} />
+            <Button t={t} title="Search Merchant" secondary onPress={openMerchantSearch} />
+            <Button t={t} title="Enter Merchant Manually" secondary onPress={() => openManualEntry('')} />
+            <Text style={{ color: t.secondary, fontSize: 11, textAlign: 'center' }}>Foreground / when-in-use only. Raw coordinates are not written to purchase history or analytics.</Text>
+            {locationState === 'denied' ? <Text style={{ color: t.secondary, fontSize: 11, textAlign: 'center' }}>Location denied — Quick Swipe remains fully usable.</Text> : null}
+          </>}
+
+          {step === 'nearby' && <>
+            <Header t={t} title="Nearby Stores" subtitle="You choose the merchant. Closest is never auto-selected." />
+            {merchantResults.map((item) => <RowButton
+              key={item.providerPlaceId || item.id}
+              t={t}
+              title={item.name}
+              subtitle={`${item.distanceMeters == null ? 'Distance unavailable' : `${Math.round(item.distanceMeters)} m`} • ${nearbyConfidenceLabel(item)}${item.address ? ` • ${item.address}` : ''}`}
+              onPress={() => pickMerchant(item)}
+            />)}
+            <Text style={{ color: t.secondary, fontSize: 11, textAlign: 'center' }}>Nearby POI source: TomTom via the SwipeWise backend. Provider categories are hints only, not guaranteed transaction MCCs.</Text>
+            <Button t={t} title="Search Merchant" secondary onPress={openMerchantSearch} />
+            <Button t={t} title="Enter Manually" secondary onPress={() => openManualEntry('')} />
+            <Button t={t} title="Back" secondary onPress={() => setStep('in_store_start')} />
+          </>}
+
+          {step === 'merchant_search' && <>
+            <Header t={t} title={mode === 'Online' ? 'Search Online Merchant' : 'Search Merchant'} subtitle={mode === 'Online' ? 'Popular merchants appear below. Location is not used.' : 'Search works even if location is denied.'} />
+            <Field t={t} value={merchantQuery} onChangeText={setMerchantQuery} placeholder={mode === 'Online' ? 'Amazon, Best Buy, Air Canada…' : 'Costco, Shell, local store…'} autoCapitalize="words" />
+            <Button t={t} title={merchantBusy ? 'Searching…' : 'Search'} disabled={merchantBusy} onPress={handleMerchantSearch} />
+            {merchantError ? <Glass t={t}><Text style={{ color: '#e8aa2e' }}>{merchantError}</Text></Glass> : null}
+            {merchantResults.map((item) => <RowButton
+              key={`${item.providerPlaceId || item.id}:${item.address || ''}`}
+              t={t}
+              title={item.name}
+              subtitle={item.provider === 'tomtom'
+                ? `${item.distanceMeters == null ? 'TomTom result' : `${Math.round(item.distanceMeters)} m`} ${item.address ? `• ${item.address}` : ''}`
+                : `${item.normalizedCategory || (mode === 'Online' ? 'Online merchant' : 'Known merchant')} • SwipeWise catalog`}
+              onPress={() => pickMerchant(item)}
+            />)}
+            {merchantQuery.trim() ? <Button t={t} title={`Use “${merchantQuery.trim()}” Manually`} secondary onPress={() => openManualEntry(merchantQuery.trim())} /> : null}
+            <Button t={t} title="Enter Another Merchant Manually" secondary onPress={() => openManualEntry('')} />
+            <Button t={t} title="Back" secondary onPress={() => setStep(mode === 'Online' ? 'mode' : 'in_store_start')} />
+          </>}
+
+          {step === 'manual_merchant' && <>
+            <Header t={t} title="Enter Merchant" subtitle="SwipeWise preserves the name you give us and does not invent MCC or network acceptance." />
+            <Field t={t} value={manualMerchantName} onChangeText={setManualMerchantName} placeholder="Merchant name" autoCapitalize="words" />
+            {merchantError ? <Text style={{ color: RED }}>{merchantError}</Text> : null}
+            <Button t={t} title="Continue" disabled={!manualMerchantName.trim()} onPress={useManualMerchant} />
+            <Button t={t} title="Back" secondary onPress={() => setStep(mode === 'Online' ? 'merchant_search' : 'in_store_start')} />
           </>}
 
           {step === 'category' && <>
@@ -605,6 +739,10 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
 
           {step === 'best' && <>
             <Header t={t} title="Your Best Card" subtitle={`${merchant?.name} • ${category}`} />
+            {merchant && (merchant.normalizationStatus !== 'KNOWN' || merchant.acceptance?.status !== 'VERIFIED' || merchant.mccEvidence?.status !== 'VERIFIED') ? <Glass t={t}>
+              <Text style={{ color: t.text, fontWeight: '800' }}>Merchant context</Text>
+              {merchantEvidence.map((line) => <Text key={line} style={{ color: t.secondary, marginTop: 5 }}>• {line}</Text>)}
+            </Glass> : null}
             {!best || !bestCard ? <Glass t={t}><Text style={{ color: RED, fontWeight: '800' }}>SwipeWise does not have enough verified data to make a recommendation for this context.</Text></Glass> : <>
               <CardVisual t={t} card={bestCard} />
               <Glass t={t}>
@@ -648,7 +786,7 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
         <Modal visible={why} animationType="slide" onRequestClose={() => setWhy(false)}>
           <AppShell theme={theme}>
             <ScrollView contentContainerStyle={styles.page}>
-              <Header t={t} title="Why This Card?" subtitle="Deterministic result from verified Supabase rules." />
+              <Header t={t} title="Why This Card?" subtitle="Deterministic result from verified financial rules plus explicit merchant context." />
               {best && bestCard && <CardVisual t={t} card={bestCard} compact />}
               {best && <Glass t={t}>
                 <Text style={{ color: t.text, fontWeight: '900' }}>{rewardLabel(best)}</Text>
@@ -657,6 +795,7 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
                 <Text style={{ color: t.secondary, marginTop: 5 }}>Last verified: {verifiedDate(best.verifiedAt)}</Text>
                 {best.reasonCodes.map((code) => <Text key={code} style={{ color: t.secondary, marginTop: 5 }}>• {code.replaceAll('_', ' ').toLowerCase()}</Text>)}
               </Glass>}
+              {merchant ? <Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Merchant evidence passed to the engine</Text>{merchantEvidence.map((line) => <Text key={line} style={{ color: t.secondary, marginTop: 5 }}>• {line}</Text>)}</Glass> : null}
               <Text style={[styles.sectionTitle, { color: t.text }]}>Ranked Alternatives</Text>
               {ranked.map((candidate, index) => <Glass key={candidate.cardSlug} t={t}><DetailRow t={t} a={`#${index + 1} ${candidate.cardName}`} b={rewardLabel(candidate)} />{candidate.warningCodes.slice(0, 2).map((code) => <Text key={code} style={{ color: '#e8aa2e', fontSize: 11, marginTop: 4 }}>⚠ {warningText(code)}</Text>)}</Glass>)}
               <Button t={t} title="Back" onPress={() => setWhy(false)} />
@@ -825,7 +964,7 @@ function Settings({
       <Text style={{ color: t.secondary, fontSize: 12 }}>Notification toggles are still local UI placeholders in this milestone. The database has a settings field ready for them.</Text>
     </>}
     {page === 'Data & Privacy' && <>
-      <Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Location</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Location behavior is unchanged in this backend milestone and still uses demo nearby merchants.</Text></Glass>
+      <Glass t={t}><Text style={{ color: t.text, fontWeight: '800' }}>Location</Text><Text style={{ color: t.secondary, marginTop: 5 }}>Location is requested only when you tap Find Nearby Stores. Denying location keeps Search Merchant and Enter Manually available.</Text></Glass>
       <Glass t={t}><Text style={{ color: t.text }}>Your account, wallet selections, settings and logged purchases now sync through Supabase. SwipeWise still does not store full card numbers, CVV, PIN or expiry.</Text></Glass>
       <Button t={t} title="Clear Purchase History" secondary onPress={onClear} />
     </>}

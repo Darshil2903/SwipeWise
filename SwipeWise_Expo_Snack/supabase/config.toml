@@ -1,0 +1,4 @@
+# Chat 07 merchant provider proxy.
+# The mobile app must be authenticated before invoking the function.
+[functions.merchant-search]
+verify_jwt = true

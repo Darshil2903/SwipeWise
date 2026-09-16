@@ -2,7 +2,7 @@
   "expo": {
     "name": "SwipeWise",
     "slug": "swipewise",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -13,6 +13,14 @@
     },
     "web": {
       "bundler": "metro"
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SwipeWise uses your location only when you ask for nearby stores. Your location is not continuously tracked."
+        }
+      ]
+    ]
   }
 }

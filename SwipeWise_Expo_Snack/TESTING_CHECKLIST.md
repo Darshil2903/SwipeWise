@@ -46,3 +46,18 @@
 - [ ] Sign back in as User A and confirm original data returns.
 
 If a test fails, record exact input context, owned card slugs, expected winner, actual winner, rule IDs, reason codes, warning codes, and the relevant Supabase rows before changing logic.
+
+---
+
+## Chat 07 regression
+
+Automated:
+
+```bash
+npm run test:engine
+npm run test:merchant
+```
+
+Expected: engine 28/28 and merchant context 15/15.
+
+Physical-iPhone/live-provider cases are documented in `docs/CHAT10_MERCHANT_LOCATION_QA.md` and must not be marked passed based on unit tests alone.
