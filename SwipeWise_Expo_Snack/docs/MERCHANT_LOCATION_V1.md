@@ -154,3 +154,15 @@ Expected:
 - Merchant Context: 15/15
 
 Live GPS/Google provider behavior requires physical-iPhone QA after provider deployment.
+
+## Google Places free-tier safety guard
+
+SwipeWise now has a server-side monthly request guard in addition to the user's Google Cloud billing budget alert.
+
+- Default hard cap: **4,000 Google Places request attempts/month**.
+- The cap is global for the SwipeWise Supabase project and intentionally combines nearby + text search requests conservatively.
+- It is below Google's current 5,000 free monthly events for the relevant Pro SKUs.
+- At the cap, Google is not called and Quick Swipe falls back to manual merchant entry/search.
+- The counter stores only month + aggregate count; no user/location/merchant data is retained.
+- If the counter/RPC is unavailable, merchant-search fails closed and does not call Google.
+- Optional environment override: `GOOGLE_PLACES_MONTHLY_REQUEST_LIMIT`, clamped to 1..4900.

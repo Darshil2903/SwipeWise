@@ -1,6 +1,6 @@
 {
   "name": "swipewise-expo",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -8,7 +8,8 @@
     "web": "expo start --web",
     "test:engine": "node --experimental-default-type=module tests/recommendationEngine.test.js",
     "test:merchant": "node --experimental-default-type=module tests/merchantContext.test.js",
-    "test": "npm run test:engine && npm run test:merchant"
+    "test": "npm run test:engine && npm run test:merchant && npm run test:guard",
+    "test:guard": "node --experimental-default-type=module tests/googlePlacesUsageGuard.test.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

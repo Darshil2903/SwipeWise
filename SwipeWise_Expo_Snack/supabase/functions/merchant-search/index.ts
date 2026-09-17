@@ -7,6 +7,10 @@ const MAX_RADIUS_METERS = 10_000;
 const MAX_RESULTS = 20;
 const GOOGLE_NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby';
 const GOOGLE_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText';
+const DEFAULT_MONTHLY_REQUEST_LIMIT = 4_000;
+// Google currently gives Nearby Search Pro and Text Search Pro 5,000 free
+// monthly events per SKU. SwipeWise intentionally uses a lower combined cap.
+const MAX_FREE_TIER_SAFETY_LIMIT = 4_900;
 const GOOGLE_FIELD_MASK = [
   'places.id',
   'places.displayName',
@@ -26,6 +30,12 @@ function json(status: number, payload: unknown) {
 function finite(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function monthlyRequestLimit() {
+  const configured = finite(Deno.env.get('GOOGLE_PLACES_MONTHLY_REQUEST_LIMIT'));
+  if (configured == null) return DEFAULT_MONTHLY_REQUEST_LIMIT;
+  return Math.min(Math.max(Math.floor(configured), 1), MAX_FREE_TIER_SAFETY_LIMIT);
 }
 
 function toRadians(value: number) {
@@ -92,6 +102,59 @@ async function googlePlacesRequest(
   });
 }
 
+function getSupabaseAdminCredential() {
+  // Legacy service_role remains pre-populated by Supabase for hosted Edge
+  // Functions. Prefer it when available. Fall back to the new secret-key map.
+  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacy) return legacy;
+
+  const rawSecretKeys = Deno.env.get('SUPABASE_SECRET_KEYS');
+  if (!rawSecretKeys) return null;
+  try {
+    const parsed = JSON.parse(rawSecretKeys);
+    return parsed?.default || Object.values(parsed || {})[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function consumeGooglePlacesAllowance(limit: number) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const adminCredential = getSupabaseAdminCredential();
+  if (!supabaseUrl || !adminCredential) {
+    throw new Error('Usage guard backend credential is unavailable.');
+  }
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_google_places_request`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: adminCredential,
+      Authorization: `Bearer ${adminCredential}`,
+    },
+    body: JSON.stringify({ p_limit: limit }),
+  });
+
+  if (!response.ok) {
+    // Do not fall through to Google if the safety counter cannot be verified.
+    console.error(`merchant-search usage guard error status=${response.status}`);
+    throw new Error('Usage guard is unavailable.');
+  }
+
+  const payload = await response.json();
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  if (!row || typeof row.allowed !== 'boolean') {
+    throw new Error('Usage guard returned an invalid response.');
+  }
+
+  return {
+    allowed: row.allowed,
+    used: Number(row.used || 0),
+    remaining: Number(row.remaining || 0),
+    monthStart: row.month_start || null,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json(405, { ok: false, error: 'Method not allowed.' });
@@ -154,6 +217,32 @@ Deno.serve(async (req) => {
     return json(400, { ok: false, error: 'Unsupported merchant-search action.' });
   }
 
+  const monthlyLimit = monthlyRequestLimit();
+  let usage;
+  try {
+    usage = await consumeGooglePlacesAllowance(monthlyLimit);
+  } catch {
+    return json(503, {
+      ok: false,
+      code: 'GOOGLE_PLACES_USAGE_GUARD_UNAVAILABLE',
+      error: 'Merchant lookup safety guard is unavailable. Google Places was not called. Search or enter the merchant manually.',
+    });
+  }
+
+  if (!usage.allowed) {
+    return json(429, {
+      ok: false,
+      code: 'GOOGLE_PLACES_SAFETY_LIMIT_REACHED',
+      error: 'Google Places monthly safety limit reached. SwipeWise will not send more Google merchant requests this month. Search or enter the merchant manually.',
+      usage: {
+        used: usage.used,
+        remaining: 0,
+        limit: monthlyLimit,
+        monthStart: usage.monthStart,
+      },
+    });
+  }
+
   try {
     const response = await googlePlacesRequest(endpoint, apiKey, googleBody);
     if (!response.ok) {
@@ -161,10 +250,18 @@ Deno.serve(async (req) => {
       // purchase amounts, or raw provider response bodies.
       console.error(`merchant-search provider error status=${response.status}`);
       if (response.status === 429) {
-        return json(429, { ok: false, error: 'Merchant provider quota reached.' });
+        return json(429, {
+          ok: false,
+          code: 'GOOGLE_PROVIDER_QUOTA_REACHED',
+          error: 'Google Places quota reached. Search or enter the merchant manually.',
+        });
       }
       if (response.status === 403) {
-        return json(502, { ok: false, error: 'Google Places rejected the server credential or API configuration.' });
+        return json(502, {
+          ok: false,
+          code: 'GOOGLE_PROVIDER_CONFIGURATION_ERROR',
+          error: 'Google Places rejected the server credential or API configuration.',
+        });
       }
       return json(502, { ok: false, error: 'Merchant provider unavailable.' });
     }
@@ -174,7 +271,17 @@ Deno.serve(async (req) => {
       ? data.places.map((place: any) => cleanPlace(place, origin)).filter((place: any) => place.id && place.poi?.name)
       : [];
 
-    return json(200, { ok: true, provider: 'google', results });
+    return json(200, {
+      ok: true,
+      provider: 'google',
+      results,
+      usage: {
+        used: usage.used,
+        remaining: usage.remaining,
+        limit: monthlyLimit,
+        monthStart: usage.monthStart,
+      },
+    });
   } catch {
     console.error('merchant-search provider request failed');
     return json(502, { ok: false, error: 'Merchant provider unavailable.' });

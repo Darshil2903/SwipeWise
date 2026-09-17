@@ -10,12 +10,26 @@ function finite(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+async function functionErrorMessage(error) {
+  const fallback = error?.message || 'Merchant provider request failed.';
+  const response = error?.context;
+  if (!response) return fallback;
+
+  try {
+    const readable = typeof response.clone === 'function' ? response.clone() : response;
+    const payload = await readable.json();
+    return payload?.error || payload?.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 async function invokeProvider(body) {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Merchant provider is unavailable until Supabase is configured.');
   }
   const { data, error } = await supabase.functions.invoke('merchant-search', { body });
-  if (error) throw error;
+  if (error) throw new Error(await functionErrorMessage(error));
   if (!data || data.ok !== true) throw new Error(data?.error || 'Merchant provider request failed.');
   return Array.isArray(data.results) ? data.results : [];
 }
@@ -67,6 +81,8 @@ export async function searchInStoreMerchants(query, { coords = null, limit = 12 
     const localFallback = local.filter((merchant) => !merchant.merchantKey || !providerKnownKeys.has(merchant.merchantKey));
     return [...provider, ...localFallback].slice(0, limit);
   } catch {
+    // Manual/local catalog fallback intentionally remains available when the
+    // provider is unavailable or the monthly safety cap has been reached.
     return local;
   }
 }

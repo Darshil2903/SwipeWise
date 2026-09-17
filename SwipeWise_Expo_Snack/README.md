@@ -39,10 +39,12 @@ Google Places content has its own attribution and caching/storage requirements. 
 
 The mobile app must never contain the Google Places API key.
 
-Set it only as a Supabase Edge Function secret:
+Apply the included usage-guard migration, then set the provider key only as a Supabase Edge Function secret:
 
 ```bash
+npx supabase db push
 npx supabase secrets set GOOGLE_PLACES_API_KEY=YOUR_GOOGLE_PLACES_API_KEY
+npx supabase secrets set GOOGLE_PLACES_MONTHLY_REQUEST_LIMIT=4000
 npx supabase functions deploy merchant-search
 ```
 
@@ -86,3 +88,7 @@ See:
 - `docs/CHAT10_MERCHANT_LOCATION_QA.md`
 - `docs/CHAT08_MERCHANT_LOCATION_SECURITY.md`
 - `docs/CHAT00_MERCHANT_LOCATION_HANDOFF.md`
+
+## Google Places monthly safety cap
+
+This build includes a fail-closed server-side usage guard so SwipeWise does not call Google Places indefinitely if usage spikes. The default is 4,000 Google Places request attempts per month, configurable lower through the Supabase Edge Function secret `GOOGLE_PLACES_MONTHLY_REQUEST_LIMIT`. Apply the included Supabase migration with `npx supabase db push` before deploying `merchant-search`.

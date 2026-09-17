@@ -48,3 +48,14 @@ Automated engine and merchant-context tests must be run from the final ZIP. Live
 ## Next action
 
 Deploy/configure Google Places provider, then send this build to Chat 10 for physical-device/live-provider QA and Chat 08 for security validation.
+
+## Addendum — Google Places billing safety guard
+
+A conservative monthly Google Places usage guard has been added after the Google-provider switch.
+
+- Default project-wide hard cap: 4,000 Google Places request attempts/month.
+- Google is not called after the cap is reached.
+- Manual merchant fallback remains usable.
+- New DB migration adds one aggregate usage table + one service-role-only atomic RPC.
+- No personal/location data is stored in the counter.
+- Google Cloud $1 budget remains an alert; the SwipeWise request guard is the actual application-side safety wall.

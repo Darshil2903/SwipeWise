@@ -87,3 +87,16 @@ Verify:
 - coordinates never appear in purchase rows
 - error logs do not contain coordinates/query text
 - Google attribution is visible with Google-derived content
+
+## Billing / abuse safety guard
+
+A new aggregate server-side usage guard prevents uncapped Google Places calls.
+
+- DB object: `public.google_places_monthly_usage`.
+- RPC: `public.consume_google_places_request(integer)`.
+- RPC execution is revoked from `public`, `anon`, and `authenticated`; only `service_role` may execute it.
+- Edge Function uses Supabase's server-provided admin credential only inside the hosted function.
+- No service-role/secret key is exposed to Expo.
+- Counter contains month, request count, and update timestamp only.
+- No user IDs, coordinates, merchant names, queries, wallet data, or recommendation data are stored.
+- Counter increment is atomic and the function fails closed if the guard cannot be checked.
