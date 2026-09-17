@@ -1,51 +1,50 @@
-# Chat 00 Milestone Handoff — Merchant & Location Integration v1
+# Chat 00 Handoff — Chat 07 Google Places Provider Revision
 
 ## Build
-`03 - SwipeWise_Expo_Merchant_Location_V1.zip`
 
-## What was built
-- Foreground-only location path after explicit In Store selection.
-- Production-capable nearby POI discovery through authenticated Supabase Edge Function.
-- TomTom Search API v2 provider adapter.
-- Deterministic nearby ordering with explicit user selection; no closest-store auto-selection.
-- Local/manual fallback for denied location, provider failure, no results and unknown merchants.
-- Merchant normalization catalog with aliases, canonical keys, source metadata, evidence states and merchant-specific categories.
-- Conservative MCC and card-network acceptance evidence handling.
-- Online merchant search.
-- Real manual merchant-name capture/preservation.
-- 60-second memory-only nearby cache.
-- Automated merchant-context tests.
+`03A - SwipeWise_Expo_Google_Places_Merchant_Location_V1.zip`
 
-## Provider selected
-TomTom Search API v2 behind Supabase Edge Function, with manual/local fallback. Orbis Places should be re-evaluated after its Search API exits Public Preview.
+## Change from prior Chat 07 build
 
-## Merchant normalization status
-Implemented for V1 catalog plus provider-only/manual unknown states. Costco/Shell alias cases are tested. Provider POI categories are not treated as transaction MCC proof.
+The merchant provider has been switched from TomTom Search API v2 to **Google Places API (New)** before production/live QA.
 
-## SW-BUG status
-- SW-BUG-017 Online merchant search missing: **FIXED IN BUILD / PENDING CHAT 10 LIVE QA**.
-- SW-BUG-018 Other/manual merchant name lost: **FIXED IN BUILD / PENDING CHAT 10 LIVE QA**.
+## Preserved Chat 07 architecture
 
-## Security implications
-- New foreground location permission dependency.
-- New Supabase Edge Function and server-side `TOMTOM_API_KEY` secret.
-- No DB migration.
-- No raw coordinate persistence in normal user history.
-- No private key in Expo.
+- explicit In Store / Online intent
+- foreground-only location
+- manual fallback
+- deterministic merchant normalization
+- ambiguity/user-selection rule
+- MCC uncertainty model
+- verified network-acceptance model
+- SW-BUG-017 fix
+- SW-BUG-018 fix
+- Recommendation Engine contract
 
-## Cost implications
-TomTom currently includes 2,500 Search API requests/month free. Above-free pricing should be confirmed using TomTom's current calculator/plan before scale. 60-second memory cache reduces immediate duplicate nearby calls.
+## Google implementation
 
-## QA status
-Automated:
-- Recommendation Engine regression: 28/28 passed.
-- Merchant context: 15/15 passed.
-- App/new module syntax parsed successfully.
+- Nearby Search (New) via Supabase Edge Function
+- Text Search (New) only when foreground coordinates are available
+- server secret: `GOOGLE_PLACES_API_KEY`
+- API key never enters Expo
+- minimal Google field mask
+- straight-line distance calculated by Edge Function
+- Google Maps attribution displayed with Google-derived results
+- provider-result caching removed to respect Google Places content rules
+- unknown/provider-only Google merchant requires user confirmation before durable use
 
-Not performed here:
-- physical-iPhone GPS permission flow;
-- live TomTom call with production credential;
-- deployed Edge Function end-to-end test.
+## Database changes
 
-## Next blocker/dependency
-Chat 10 must deploy/configure the provider path and run the physical-iPhone QA matrix. Chat 08 should review the new Edge Function/credential/location privacy path before production release.
+None.
+
+## Dependency changes
+
+No additional dependency beyond the already-added `expo-location ~19.0.8`.
+
+## QA state
+
+Automated engine and merchant-context tests must be run from the final ZIP. Live Google Places + physical iPhone testing remains a Chat 10 responsibility.
+
+## Next action
+
+Deploy/configure Google Places provider, then send this build to Chat 10 for physical-device/live-provider QA and Chat 08 for security validation.

@@ -5,22 +5,9 @@ import {
   searchCatalogMerchants,
 } from './merchantNormalization.js';
 
-const NEARBY_CACHE_TTL_MS = 60_000;
-let nearbyCache = null;
-
 function finite(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function cacheMatches(coords, radius) {
-  if (!nearbyCache) return false;
-  if (Date.now() - nearbyCache.createdAt > NEARBY_CACHE_TTL_MS) return false;
-  if (nearbyCache.radius !== radius) return false;
-  const lat = finite(coords?.latitude);
-  const lon = finite(coords?.longitude);
-  if (lat == null || lon == null) return false;
-  return Math.abs(lat - nearbyCache.latitude) < 0.0005 && Math.abs(lon - nearbyCache.longitude) < 0.0005;
 }
 
 async function invokeProvider(body) {
@@ -38,8 +25,8 @@ export async function getNearbyMerchants(coords, { radius = 600, limit = 12 } = 
   const longitude = finite(coords?.longitude);
   if (latitude == null || longitude == null) throw new Error('A valid foreground location is required.');
 
-  if (cacheMatches(coords, radius)) return nearbyCache.results;
-
+  // Google Places content is intentionally not cached or durably stored by this
+  // client service. Each explicit nearby request goes through the backend proxy.
   const raw = await invokeProvider({
     action: 'nearby',
     latitude,
@@ -47,12 +34,7 @@ export async function getNearbyMerchants(coords, { radius = 600, limit = 12 } = 
     radius,
     limit,
   });
-  const normalized = orderNearbyMerchants(raw.map((result) => normalizeProviderMerchant(result, { mode: 'In Store' })));
-
-  // Memory only; this disappears when the JS process ends. It is not purchase
-  // history, analytics, AsyncStorage, or a durable coordinate log.
-  nearbyCache = { latitude, longitude, radius, results: normalized, createdAt: Date.now() };
-  return normalized;
+  return orderNearbyMerchants(raw.map((result) => normalizeProviderMerchant(result, { mode: 'In Store' })));
 }
 
 export async function searchInStoreMerchants(query, { coords = null, limit = 12 } = {}) {
@@ -60,25 +42,30 @@ export async function searchInStoreMerchants(query, { coords = null, limit = 12 
   if (!trimmed) return searchCatalogMerchants('', { mode: 'in_store', limit });
 
   const local = searchCatalogMerchants(trimmed, { mode: 'in_store', limit });
-  if (!isSupabaseConfigured) return local;
+
+  // Location denial must never block merchant search. Without user-provided
+  // foreground coordinates we intentionally avoid server-IP-biased Google
+  // Text Search and keep the local catalog + manual-entry fallback.
+  const latitude = finite(coords?.latitude);
+  const longitude = finite(coords?.longitude);
+  if (!isSupabaseConfigured || latitude == null || longitude == null) return local;
 
   try {
     const raw = await invokeProvider({
       action: 'search',
       query: trimmed,
-      latitude: finite(coords?.latitude),
-      longitude: finite(coords?.longitude),
-      radius: coords ? 10_000 : null,
+      latitude,
+      longitude,
+      radius: 10_000,
       limit,
     });
     const provider = raw.map((result) => normalizeProviderMerchant(result, { mode: 'In Store' }));
-    const seen = new Set();
-    return [...local, ...provider].filter((merchant) => {
-      const key = merchant.providerPlaceId || merchant.merchantKey || `${merchant.name}:${merchant.address}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, limit);
+
+    // Prefer physical Google place results when available. Keep catalog entries
+    // only for merchant identities not already represented by a provider result.
+    const providerKnownKeys = new Set(provider.map((merchant) => merchant.merchantKey).filter(Boolean));
+    const localFallback = local.filter((merchant) => !merchant.merchantKey || !providerKnownKeys.has(merchant.merchantKey));
+    return [...provider, ...localFallback].slice(0, limit);
   } catch {
     return local;
   }
@@ -88,6 +75,6 @@ export function searchOnlineMerchants(query, { limit = 12 } = {}) {
   return searchCatalogMerchants(query, { mode: 'online', limit });
 }
 
-export function clearNearbyMerchantCache() {
-  nearbyCache = null;
-}
+// Kept as a compatibility no-op for callers from older Chat 07 builds.
+// Google Places provider content is not cached in this implementation.
+export function clearNearbyMerchantCache() {}

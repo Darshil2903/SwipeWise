@@ -1,98 +1,119 @@
-# SwipeWise Supabase Setup — Windows + VS Code + iPhone
+# SwipeWise Supabase Setup — Google Places Merchant Discovery
 
-This project expects the SwipeWise development Supabase backend plus the verified Chat 05 Canadian card-data migration.
+## 1. Existing SwipeWise backend
 
-## 1. Database state required
+Use the existing SwipeWise development Supabase project containing the approved auth/profile/settings/wallet/purchase schema and verified Canadian card reference data.
 
-For an existing SwipeWise development project, confirm the following are already present:
+Do not re-run `backend/demo_seed.sql` over the verified reference dataset.
 
-- Base schema from `backend/supabase_schema.sql`
-- Auth/profile/settings/wallet/purchase RLS baseline
-- Chat 05 verified migration: `SwipeWise_verified_card_data_v1_2026_08_17.sql`
+## 2. Client-safe Expo variables
 
-The verified migration extends `card_products`, `reward_rules`, and `card_benefits` and loads the initial exact verified products/rules/benefits. It was intentionally kept as the Chat 05 source-of-truth migration and is not re-authored by Chat 06.
-
-**Do not run `backend/demo_seed.sql` on a database that already has the verified Chat 05 data.** It is retained only as historical development material.
-
-## 2. Client-safe Supabase values
-
-From Supabase Dashboard copy only:
-
-- Project URL
-- Publishable key (`sb_publishable_...`)
-
-Do not copy a secret key, `sb_secret_*`, legacy `service_role`, database password, or JWT signing secret into Expo.
-
-## 3. Create `.env`
-
-At the project root:
+Create `.env` in the project root:
 
 ```text
 EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
-EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY_HERE
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
 ```
 
-`.env` is ignored by `.gitignore`.
+Only client-safe Supabase values belong in Expo.
 
-## 4. Install and start
+Never add:
+
+- `GOOGLE_PLACES_API_KEY`
+- Supabase `service_role` / secret key
+- database password
+- JWT signing secret
+
+## 3. Create a Google Cloud Places API key
+
+In Google Cloud Console:
+
+1. Create or select the Google Cloud project for SwipeWise.
+2. Attach a billing account as required by Google Maps Platform.
+3. Enable **Places API (New)**.
+4. Create an API key.
+5. Restrict the key under **API restrictions** to **Places API (New)**.
+6. Do not copy this key into Expo `.env`.
+
+The key is used only by the Supabase Edge Function.
+
+## 4. Log into and link Supabase CLI
+
+From the `swipewise_expo` project folder:
+
+```bash
+npx supabase login
+npx supabase projects list
+npx supabase link --project-ref YOUR_PROJECT_REF
+```
+
+Your project ref is the subdomain from:
+
+```text
+https://YOUR_PROJECT_REF.supabase.co
+```
+
+## 5. Set the server-only Google Places secret
+
+```bash
+npx supabase secrets set GOOGLE_PLACES_API_KEY=YOUR_GOOGLE_PLACES_API_KEY
+```
+
+Verify the secret name exists:
+
+```bash
+npx supabase secrets list
+```
+
+You should see `GOOGLE_PLACES_API_KEY`; the actual value should not be printed.
+
+## 6. Deploy merchant-search
+
+```bash
+npx supabase functions deploy merchant-search
+```
+
+`supabase/config.toml` keeps JWT verification enabled for this function.
+
+## 7. Start Expo cleanly
 
 ```bash
 npm install
-npx expo start
+npx expo start -c
 ```
 
-If Expo dependency alignment is needed:
+Then sign in and test:
 
-```bash
-npx expo install @supabase/supabase-js @react-native-async-storage/async-storage react-native-url-polyfill
-```
+`Quick Swipe -> In Store -> Find Nearby Stores`
 
-For tunnel mode if LAN discovery fails:
+## 8. Edge Function behavior
 
-```bash
-npm i -g @expo/ngrok
-npx expo start --tunnel
-```
+The mobile app sends only what is required for merchant discovery:
 
-## 5. Verify Recommendation Engine reference access
+- foreground latitude/longitude
+- search radius
+- result limit
+- merchant text query when the user explicitly searches
 
-After signing in, SwipeWise should be able to read active verified reference rows from:
+It does not send wallet contents, card ownership, purchase amount, reward preference, purchase history, or Recommendation Engine result to Google Places.
 
-- `card_products`
-- `reward_rules`
-- `card_benefits`
+## 9. Google Places API calls used
 
-The app caches this public/reference data for one hour. If refresh fails but a prior cache exists, it can use the stale cache and surfaces a warning.
+The Edge Function uses:
 
-The wallet itself remains user-specific through `user_cards`; checkout ranking evaluates only wallet products.
+- `POST https://places.googleapis.com/v1/places:searchNearby`
+- `POST https://places.googleapis.com/v1/places:searchText`
 
-## 6. Verify user data
+Only a minimal field mask is requested:
 
-Use Supabase Dashboard to check:
+- place ID
+- display name
+- formatted address
+- location
+- primary type / types
 
-- Authentication → Users
-- `profiles`
-- `user_settings`
-- `user_cards`
-- `purchases`
+The Edge Function calculates straight-line distance itself from the returned coordinates rather than purchasing/requesting routing-distance data.
 
-Create User A and User B and verify each authenticated app session can see only its own private rows. The Supabase Table Editor is an admin view and can show rows for both users.
+## 10. No database migration
 
-## 7. Development email confirmation
-
-If the existing development project currently has email confirmation disabled for testing, keep that as the previously approved development-only setup. Re-enable/implement the production email verification flow before launch.
-
----
-
-## Chat 07: merchant-search Edge Function
-
-The TomTom provider key is server-only. Do not add it to Expo `.env` files.
-
-```bash
-supabase secrets set TOMTOM_API_KEY=YOUR_TOMTOM_KEY
-supabase functions deploy merchant-search
-```
-
-`supabase/config.toml` enables JWT verification for this function. The Expo app should contain only the client-safe Supabase URL and publishable key shown in `.env.example`.
-
-No Chat 07 database migration is required.
+This provider swap does not require a new Supabase database table, RLS policy, or destructive migration.

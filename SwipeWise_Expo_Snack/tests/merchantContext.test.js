@@ -14,13 +14,14 @@ import {
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 
-function tomtomResult({ id, name, dist = 20, score = 0.9, brands = [], classification = 'shop' }) {
+function googleResult({ id, name, dist = 20, score = null, brands = [], classification = 'store' }) {
   return {
     id,
     dist,
     score,
     position: { lat: 49.28, lon: -123.12 },
-    address: { streetNumber: '1', streetName: 'Test St', municipality: 'Vancouver', countrySubdivision: 'BC', postalCode: 'V0V0V0' },
+    provider: 'google',
+    address: { formattedAddress: '1 Test St, Vancouver, BC V0V 0V0' },
     poi: {
       name,
       brands: brands.map((brand) => ({ name: brand })),
@@ -30,16 +31,18 @@ function tomtomResult({ id, name, dist = 20, score = 0.9, brands = [], classific
 }
 
 test('1. Costco provider alias normalizes to canonical Costco', () => {
-  const merchant = normalizeProviderMerchant(tomtomResult({ id: 'c1', name: 'Costco Wholesale #1234' }), { mode: 'In Store' });
+  const merchant = normalizeProviderMerchant(googleResult({ id: 'c1', name: 'Costco Wholesale #1234' }), { mode: 'In Store' });
   assert.equal(merchant.merchantKey, 'costco');
   assert.equal(merchant.canonicalName, 'Costco');
   assert.equal(merchant.normalizationStatus, NORMALIZATION_STATUS.KNOWN);
   assert.equal(merchant.providerPlaceId, 'c1');
   assert.equal(merchant.providerName, 'Costco Wholesale #1234');
+  assert.equal(merchant.provider, 'google');
+  assert.equal(merchant.address, '1 Test St, Vancouver, BC V0V 0V0');
 });
 
 test('2. Shell aliases normalize without losing provider metadata', () => {
-  const merchant = normalizeProviderMerchant(tomtomResult({ id: 's1', name: 'Shell Station #98', brands: ['Shell'] }), { mode: 'In Store' });
+  const merchant = normalizeProviderMerchant(googleResult({ id: 's1', name: 'Shell Station #98', brands: ['Shell'] }), { mode: 'In Store' });
   assert.equal(merchant.merchantKey, 'shell');
   assert.equal(merchant.canonicalName, 'Shell');
   assert.equal(merchant.providerName, 'Shell Station #98');
@@ -74,7 +77,7 @@ test('6. Costco online acceptance stays mode-specific', () => {
 });
 
 test('7. Provider POI classifications are not promoted to financial MCC evidence', () => {
-  const merchant = normalizeProviderMerchant(tomtomResult({ id: 'u1', name: 'Unlisted Pharmacy', classification: 'pharmacy' }), { mode: 'In Store' });
+  const merchant = normalizeProviderMerchant(googleResult({ id: 'u1', name: 'Unlisted Pharmacy', classification: 'pharmacy' }), { mode: 'In Store' });
   assert.deepEqual(merchant.providerCategories, ['pharmacy']);
   assert.equal(merchant.mccEvidence.status, MCC_STATUS.UNKNOWN);
   const context = toRecommendationMerchantContext(merchant);
@@ -110,9 +113,9 @@ test('11. Explicit purchase mode controls normalization context, not physical lo
 });
 
 test('12. Nearby ordering is deterministic but never performs selection', () => {
-  const farKnown = normalizeProviderMerchant(tomtomResult({ id: 'a', name: 'Costco', dist: 120, score: 0.9 }), { mode: 'In Store' });
-  const closeUnknown = normalizeProviderMerchant(tomtomResult({ id: 'b', name: 'Cafe Next Door', dist: 20, score: 0.8 }), { mode: 'In Store' });
-  const closeKnown = normalizeProviderMerchant(tomtomResult({ id: 'c', name: 'Shell', dist: 25, score: 0.7 }), { mode: 'In Store' });
+  const farKnown = normalizeProviderMerchant(googleResult({ id: 'a', name: 'Costco', dist: 120, score: 0.9 }), { mode: 'In Store' });
+  const closeUnknown = normalizeProviderMerchant(googleResult({ id: 'b', name: 'Cafe Next Door', dist: 20, score: 0.8 }), { mode: 'In Store' });
+  const closeKnown = normalizeProviderMerchant(googleResult({ id: 'c', name: 'Shell', dist: 25, score: 0.7 }), { mode: 'In Store' });
   const ordered = orderNearbyMerchants([farKnown, closeUnknown, closeKnown]);
   assert.equal(ordered.length, 3);
   assert.equal(ordered[0].providerPlaceId, 'c');
@@ -126,7 +129,7 @@ test('13. No nearby provider results remains a valid empty state', () => {
 });
 
 test('14. Unknown provider merchant remains PROVIDER_ONLY with unknown acceptance', () => {
-  const merchant = normalizeProviderMerchant(tomtomResult({ id: 'z9', name: 'Neighbourhood Market' }), { mode: 'In Store' });
+  const merchant = normalizeProviderMerchant(googleResult({ id: 'z9', name: 'Neighbourhood Market' }), { mode: 'In Store' });
   assert.equal(merchant.normalizationStatus, NORMALIZATION_STATUS.PROVIDER_ONLY);
   assert.equal(merchant.acceptance.status, ACCEPTANCE_STATUS.UNKNOWN);
   assert.equal(merchant.acceptance.networks, null);

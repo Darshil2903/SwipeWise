@@ -1,75 +1,88 @@
-# SwipeWise — Expo + Supabase + Recommendation Engine v1
+# SwipeWise — Expo + Supabase + Recommendation Engine + Google Places Merchant Context
 
-This is the active SwipeWise Expo/React Native project. It preserves the existing UI, authentication, navigation, Quick Swipe flow, wallet/history persistence, and Light/Dark/System behavior while replacing the checkout recommendation's hard-coded financial path with a deterministic engine backed by the verified Supabase reference tables.
+This is the current SwipeWise Expo/React Native development build. It preserves the existing UI, authentication, navigation, Quick Swipe flow, wallet/history persistence, Light/Dark/System appearance, and deterministic Recommendation Engine while replacing the previous TomTom merchant provider with **Google Places API (New)** behind a Supabase Edge Function.
 
-## What is production-backed in this milestone
+## Production-backed pieces in this build
 
 - Supabase email/password authentication and persistent sessions
 - RLS-isolated user profile, settings, wallet, and purchase history
-- Exact card-product identities from `card_products`
-- Verified reward rules from `reward_rules`
-- Verified card benefits from `card_benefits`
-- Wallet-only checkout ranking
-- Explicit In Store vs Online purchase mode
-- Deterministic rule precedence, effective-date checks, lifecycle checks, thresholds, caps, post-cap rates, and shared cap groups
-- Context-sensitive benefit handling without turning insurance limits into reward dollars
-- Deterministic `Why This Card` reason/warning codes
-- One-hour client cache for public/reference card data, with stale-cache warning fallback
-- 28 deterministic recommendation-engine scenarios in `tests/recommendationEngine.test.js`
+- Verified card products, reward rules, and card benefits from Supabase
+- Wallet-only deterministic recommendation ranking
+- Explicit **In Store / Online** intent choice
+- Foreground-only `expo-location`, requested only when the user taps **Find Nearby Stores**
+- Google Places API (New) Nearby Search through authenticated Supabase Edge Function `merchant-search`
+- Google Places API (New) Text Search only when foreground coordinates are already available
+- Manual merchant search/entry fallback when location/provider is unavailable
+- Deterministic merchant normalization into SwipeWise canonical merchant identities
+- MCC/category uncertainty kept separate from Google place types
+- Verified network acceptance passed to the engine only when SwipeWise has verified evidence
+- SW-BUG-017 online merchant search flow
+- SW-BUG-018 merchant-name preservation for manual entry
+- Google Maps text attribution shown with Google-derived merchant results
 
-## Important financial-data policy
+## Important merchant-data rules
 
-Issuer earning facts and SwipeWise estimates are separate. `point_value_cents` from the old prototype is **not** used as an issuer fact. Production point valuations are intentionally empty in `engine/pointValuations.js` until a separately sourced SwipeWise valuation methodology is approved. Therefore point multipliers can be shown without inventing a cash-equivalent value.
+Google Places is a **discovery source**, not SwipeWise's financial truth.
 
-Coverage limits for insurance/protection are descriptive metadata. They are never added to a numeric reward score.
+- A Google place type is never treated as a guaranteed transaction MCC.
+- Google does not decide card-network acceptance.
+- The user still chooses the intended merchant.
+- GPS never decides whether the purchase is In Store or Online.
+- Raw user coordinates are not written to purchase/recommendation history or analytics.
+- Google Places result content is not cached or durably stored by the merchant provider service.
+- Known Google results are normalized to SwipeWise's own canonical merchant record before purchase persistence.
+- Unknown/provider-only Google results require the user to confirm or edit the merchant name before continuing.
 
-## What remains demo / deferred
+Google Places content has its own attribution and caching/storage requirements. Review the current Google Maps Platform terms before production release.
 
-- Nearby/online merchant lists in `App.js` are UI-only demo discovery data. They contain no financial rates.
-- Merchant/MCC normalization and confirmed network acceptance remain a Chat 07 dependency. Until supplied, the engine uses verified base or merchant-specific rules conservatively and warns when a classification is required.
-- Authoritative issuer cap progress is not available from optional SwipeWise purchase logs. Logs can prove a minimum spend but cannot prove that the issuer-account cap is unused. The engine therefore uses a conservative post-cap rate when cap progress is unknown.
-- Production monetary point valuations are not configured yet.
-- Native Action Button/App Intents, Safari extension, Apple Pay, bank connections, personalized bank offers, and monetization remain out of scope.
+## Server-side provider secret
 
-## Project setup
+The mobile app must never contain the Google Places API key.
 
-Read `SUPABASE_SETUP.md`. For the live development backend, the Chat 05 verified-card migration must already be applied in addition to the base schema.
+Set it only as a Supabase Edge Function secret:
 
-Client environment variables:
-
-```text
-EXPO_PUBLIC_SUPABASE_URL=
-EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```bash
+npx supabase secrets set GOOGLE_PLACES_API_KEY=YOUR_GOOGLE_PLACES_API_KEY
+npx supabase functions deploy merchant-search
 ```
 
-Never put a Supabase `service_role` key, `sb_secret_*` key, database password, or other server secret in the Expo app.
+The Google Cloud project for that key must have **Places API (New)** enabled and billing configured. Restrict the key to the Places API (New) service.
+
+## Client environment
+
+Create `.env` from `.env.example`:
+
+```text
+EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+```
+
+Do not put `GOOGLE_PLACES_API_KEY`, Supabase service-role keys, database passwords, or other server credentials in Expo environment files.
+
+## Install and run
+
+```bash
+npm install
+npx expo start -c
+```
 
 ## Tests
 
 ```bash
-npm run test:engine
+npm run test
 ```
 
-For the generated detailed result artifact used in this milestone:
+Expected in this build:
 
-```bash
-SWIPEWISE_TEST_REPORT_PATH=tests/recommendationEngine.results.json npm run test:engine
-```
+- Recommendation Engine: **28/28**
+- Merchant Context: **15/15**
 
-See `docs/RECOMMENDATION_ENGINE_V1.md`, `docs/CHAT08_SECURITY_HANDOFF.md`, and `docs/CHAT10_QA_HANDOFF.md`.
+Physical-iPhone location and live Google Places calls still require real-device QA after the Edge Function and key are configured.
 
----
+See:
 
-## Chat 07 — Merchant & Location Integration v1
-
-This build adds a production-capable merchant-context layer while preserving explicit **In Store / Online** intent selection.
-
-- Foreground-only `expo-location`; requested only when the user taps **Find Nearby Stores**.
-- TomTom Search API v2 is called only through authenticated Supabase Edge Function `merchant-search`.
-- Manual merchant search/entry remains available when location/provider is unavailable.
-- Provider POI category is never treated as guaranteed payment-network MCC.
-- Network acceptance is passed to the engine only when evidence is verified.
-- Online merchant search and manual merchant-name preservation address SW-BUG-017 and SW-BUG-018.
-- Raw user coordinates are not stored in purchase history.
-
-See `docs/MERCHANT_LOCATION_V1.md` and the Chat 10/08 handoff docs before live deployment.
+- `SUPABASE_SETUP.md`
+- `docs/MERCHANT_LOCATION_V1.md`
+- `docs/CHAT10_MERCHANT_LOCATION_QA.md`
+- `docs/CHAT08_MERCHANT_LOCATION_SECURITY.md`
+- `docs/CHAT00_MERCHANT_LOCATION_HANDOFF.md`

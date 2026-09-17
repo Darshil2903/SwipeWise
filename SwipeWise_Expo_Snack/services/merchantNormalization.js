@@ -48,6 +48,7 @@ function modeKey(mode) {
 }
 
 function addressText(address = {}) {
+  if (address.formattedAddress) return String(address.formattedAddress).trim();
   return [address.streetNumber, address.streetName, address.municipality, address.countrySubdivision, address.postalCode]
     .filter(Boolean)
     .join(' ')
@@ -61,6 +62,12 @@ function providerClassifications(result = {}) {
 
 function providerBrands(result = {}) {
   return (result?.poi?.brands || []).map((item) => item?.name).filter(Boolean);
+}
+
+function finiteProviderNumber(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function acceptanceFor(catalogMerchant, mode) {
@@ -89,17 +96,19 @@ export function normalizeProviderMerchant(result, { mode = 'In Store' } = {}) {
   const mccEvidence = mccFor(catalog);
   const providerCategories = providerClassifications(result);
 
+  const provider = result?.provider || 'google';
+
   return {
-    id: catalog ? `merchant:${catalog.key}` : `tomtom:${result?.id || normalizeMerchantText(providerName)}`,
+    id: catalog ? `merchant:${catalog.key}` : `${provider}:${result?.id || normalizeMerchantText(providerName)}`,
     merchantKey: catalog?.key || null,
     name: catalog?.canonicalName || providerName,
     canonicalName: catalog?.canonicalName || providerName,
     enteredName: null,
     providerName,
     providerPlaceId: result?.id || null,
-    provider: 'tomtom',
-    providerScore: Number.isFinite(Number(result?.score)) ? Number(result.score) : null,
-    distanceMeters: Number.isFinite(Number(result?.dist)) ? Number(result.dist) : null,
+    provider,
+    providerScore: finiteProviderNumber(result?.score),
+    distanceMeters: finiteProviderNumber(result?.dist),
     address: addressText(result?.address),
     coordinates: result?.position && Number.isFinite(Number(result.position.lat)) && Number.isFinite(Number(result.position.lon))
       ? { latitude: Number(result.position.lat), longitude: Number(result.position.lon) }
@@ -112,7 +121,7 @@ export function normalizeProviderMerchant(result, { mode = 'In Store' } = {}) {
     normalizationConfidence: catalog ? (match.score >= 90 ? 'HIGH' : 'MEDIUM') : 'LOW',
     mccEvidence,
     acceptance,
-    source: { provider: 'tomtom', providerPlaceId: result?.id || null },
+    source: { provider, providerPlaceId: result?.id || null },
   };
 }
 

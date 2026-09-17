@@ -534,6 +534,16 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
   const bestCard = best ? wallet.find((card) => card.id === best.cardSlug) : null;
 
   const pickMerchant = (nextMerchant) => {
+    // Google Places content is used transiently for discovery. If a Google result
+    // does not map to SwipeWise's own merchant catalog, require the user to
+    // confirm/edit the merchant name before continuing so durable purchase data
+    // is based on a user-confirmed name rather than stored provider content.
+    if (nextMerchant?.provider === 'google' && nextMerchant?.normalizationStatus === 'PROVIDER_ONLY') {
+      setManualMerchantName(nextMerchant.name || '');
+      setMerchantError('');
+      setStep('manual_merchant');
+      return;
+    }
     setMerchant(nextMerchant);
     setMerchantError('');
     setCategory('Other');
@@ -692,7 +702,8 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
               subtitle={`${item.distanceMeters == null ? 'Distance unavailable' : `${Math.round(item.distanceMeters)} m`} • ${nearbyConfidenceLabel(item)}${item.address ? ` • ${item.address}` : ''}`}
               onPress={() => pickMerchant(item)}
             />)}
-            <Text style={{ color: t.secondary, fontSize: 11, textAlign: 'center' }}>Nearby POI source: TomTom via the SwipeWise backend. Provider categories are hints only, not guaranteed transaction MCCs.</Text>
+            <GoogleMapsAttribution theme={theme} />
+            <Text style={{ color: t.secondary, fontSize: 11, textAlign: 'center' }}>Google Places is used only for merchant discovery. Place types are hints only and are never treated as guaranteed transaction MCCs.</Text>
             <Button t={t} title="Search Merchant" secondary onPress={openMerchantSearch} />
             <Button t={t} title="Enter Manually" secondary onPress={() => openManualEntry('')} />
             <Button t={t} title="Back" secondary onPress={() => setStep('in_store_start')} />
@@ -707,18 +718,19 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
               key={`${item.providerPlaceId || item.id}:${item.address || ''}`}
               t={t}
               title={item.name}
-              subtitle={item.provider === 'tomtom'
-                ? `${item.distanceMeters == null ? 'TomTom result' : `${Math.round(item.distanceMeters)} m`} ${item.address ? `• ${item.address}` : ''}`
+              subtitle={item.provider === 'google'
+                ? `${item.distanceMeters == null ? 'Google Maps result' : `${Math.round(item.distanceMeters)} m`} ${item.address ? `• ${item.address}` : ''}`
                 : `${item.normalizedCategory || (mode === 'Online' ? 'Online merchant' : 'Known merchant')} • SwipeWise catalog`}
               onPress={() => pickMerchant(item)}
             />)}
+            {merchantResults.some((item) => item.provider === 'google') ? <GoogleMapsAttribution theme={theme} /> : null}
             {merchantQuery.trim() ? <Button t={t} title={`Use “${merchantQuery.trim()}” Manually`} secondary onPress={() => openManualEntry(merchantQuery.trim())} /> : null}
             <Button t={t} title="Enter Another Merchant Manually" secondary onPress={() => openManualEntry('')} />
             <Button t={t} title="Back" secondary onPress={() => setStep(mode === 'Online' ? 'mode' : 'in_store_start')} />
           </>}
 
           {step === 'manual_merchant' && <>
-            <Header t={t} title="Enter Merchant" subtitle="SwipeWise preserves the name you give us and does not invent MCC or network acceptance." />
+            <Header t={t} title="Enter Merchant" subtitle="Confirm or edit the merchant name. SwipeWise preserves the name you confirm and does not invent MCC or network acceptance." />
             <Field t={t} value={manualMerchantName} onChangeText={setManualMerchantName} placeholder="Merchant name" autoCapitalize="words" />
             {merchantError ? <Text style={{ color: RED }}>{merchantError}</Text> : null}
             <Button t={t} title="Continue" disabled={!manualMerchantName.trim()} onPress={useManualMerchant} />
@@ -809,6 +821,13 @@ function QuickSwipe({ theme, wallet, rewardPreference, purchases, referenceMeta,
 
 function BigChoice({ t, title, subtitle, onPress }) {
   return <Pressable onPress={onPress}><Glass t={t} style={{ minHeight: 120, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: CYAN, fontSize: 28 }}>▣</Text><Text style={{ color: t.text, fontWeight: '900', fontSize: 18, marginTop: 8 }}>{title}</Text><Text style={{ color: t.secondary, marginTop: 4 }}>{subtitle}</Text></Glass></Pressable>;
+}
+
+function GoogleMapsAttribution({ theme }) {
+  const color = theme === 'dark' ? '#FFFFFF' : '#5E5E5E';
+  return <View style={{ alignItems: 'center', marginVertical: 4, paddingVertical: 4 }}>
+    <Text numberOfLines={1} accessibilityLabel="Google Maps" style={{ color, fontSize: 12, fontWeight: '400', letterSpacing: 0 }}>Google Maps</Text>
+  </View>;
 }
 
 function Home({ t, userName, purchases, onQuick, onHistory }) {
