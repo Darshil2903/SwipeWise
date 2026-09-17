@@ -137,7 +137,9 @@ async function consumeGooglePlacesAllowance(limit: number) {
 
   if (!response.ok) {
     // Do not fall through to Google if the safety counter cannot be verified.
-    console.error(`merchant-search usage guard error status=${response.status}`);
+    // Include a short PostgREST error body in server logs so guard failures are diagnosable.
+    const errorBody = (await response.text()).slice(0, 800);
+    console.error(`merchant-search usage guard error status=${response.status} body=${errorBody}`);
     throw new Error('Usage guard is unavailable.');
   }
 
