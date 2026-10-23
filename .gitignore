@@ -60,3 +60,6 @@ coverage/
 *.key
 *.mobileprovision
 *.cer
+
+#Personal File information
+Memory.md
