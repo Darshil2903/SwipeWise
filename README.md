@@ -47,11 +47,15 @@ Design notes: [`docs/RECOMMENDATION_ENGINE_V1.md`](SwipeWise_Expo_Snack/docs/REC
 - **PostgreSQL schema** with 10 tables: user data (`profiles`, `user_settings`, `user_cards`, `purchases`, `recommendation_history`) and verified reference data (`banks`, `card_products`, `reward_rules`, `card_benefits`), plus a usage-tracking table.
 - **Row Level Security on every table** (21 policies): users can only read and write their own rows; reference data is read-only to clients.
 - **Indexed queries** for the hot paths (wallet lookups, rule lookups by card and category, purchase history by date).
-- **Email/password auth** with persistent sessions and automatic profile creation on sign-up (`handle_new_user` trigger).
+- **Email/password auth** with **Keychain-backed sessions** and automatic profile creation on sign-up (`handle_new_user` trigger).
+- **Idempotent writes:** logging a purchase is safe to retry, so a flaky connection never creates duplicate records.
+- **Server-side secrets only:** no private keys ship in the app.
 
 ### Merchant lookup behind an Edge Function
 - The app never holds the Google API key. Requests go through the Supabase Edge Function [`merchant-search`](SwipeWise_Expo_Snack/supabase/functions/merchant-search/index.ts) (JWT-verified, so only signed-in users can call it), which calls **Google Places API (New)** with a minimal field mask.
-- **Server-side input validation:** search radius, result count and query length are clamped before anything reaches Google.
+- **Server-side input validation and rate limiting:** search radius, result count and query length are clamped, and request rates are limited before anything reaches Google.
+- **Debounced search with request de-duplication:** typing a merchant name doesn't fire a request per keystroke, and identical in-flight requests are shared.
+- **Ambiguity handling:** when a search matches several places, the user picks the right one; manual entry is always available as a fallback.
 - **Fail-closed cost guard:** before every Google request, the function atomically consumes one unit of a monthly allowance through a Postgres RPC that only the server role can execute. If the cap is reached or the guard fails, Google is never called and the app falls back to manual entry.
 - **Merchant normalization** maps Google results to SwipeWise's own canonical merchants; Google place types are never treated as a guaranteed transaction category.
 
@@ -60,8 +64,12 @@ Design notes: [`docs/RECOMMENDATION_ENGINE_V1.md`](SwipeWise_Expo_Snack/docs/REC
 - Raw coordinates are **never stored** in purchase or recommendation history.
 - The wallet never asks for card numbers, CVV, PIN or expiry dates.
 
-### Caching
-Verified card reference data is cached in memory and on device (AsyncStorage) with a 1-hour TTL, so the checkout flow stays fast and keeps working when the network is slow.
+### Caching and reliability
+- **Two-level cache:** verified card reference data lives in memory and on device, with TTL-based freshness.
+- **Stale-while-revalidate:** the app shows cached data instantly and refreshes it in the background, so checkout stays fast on a slow network.
+- **Prefetching** of data the next screen is likely to need.
+- **Exponential-backoff retries** for failed network calls.
+- **Paginated purchase history** backed by indexed queries.
 
 ## Architecture
 
@@ -70,7 +78,7 @@ flowchart LR
     subgraph App["iPhone app (Expo / React Native)"]
         UI["Quick Swipe UI"]
         ENG["Recommendation engine<br/>(pure JS)"]
-        CACHE["Reference-data cache<br/>(memory + AsyncStorage, 1h TTL)"]
+        CACHE["Reference-data cache<br/>(memory + on-device, TTL,<br/>stale-while-revalidate)"]
     end
     subgraph SB["Supabase"]
         AUTH["Auth"]
@@ -147,15 +155,6 @@ SwipeWise_Expo_Snack/
 
 ## Roadmap
 
-In progress:
-- [ ] Keychain-backed session storage (`expo-secure-store`) instead of AsyncStorage
-- [ ] Debounced merchant search and request de-duplication
-- [ ] Stale-while-revalidate refresh and prefetching for reference data
-- [ ] Exponential-backoff retries for network calls
-- [ ] Idempotent purchase writes
-- [ ] Paginated purchase history
-
-Later:
 - [ ] New-card suggestions based on real spending (never pushy)
 - [ ] Safari extension for online checkout
 
